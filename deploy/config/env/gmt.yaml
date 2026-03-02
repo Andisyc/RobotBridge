@@ -1,0 +1,11 @@
+_target_: envs.gmt.GMTEnv
+_recursive_: False
+config:
+  device: ${device}
+  simulator: ${sim}
+  obs: ${obs}
+  control: ${robot.control}
+  collect_dataset: False
+  motion: ${mimic.motion}
+  policy: ${mimic.policy}
+

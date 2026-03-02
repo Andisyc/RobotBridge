@@ -1,0 +1,6 @@
+_target_: envs.base_env.BaseEnv
+_recursive_: False
+config:
+  simulator: ${sim}
+  obs: ${obs}
+  control: ${robot.control}

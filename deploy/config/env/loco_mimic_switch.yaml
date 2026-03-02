@@ -1,0 +1,16 @@
+_target_: envs.loco_mimic_switch.LocoMimicSwitchEnv
+_recursive_: False
+config:
+  device: ${device}
+  simulator: ${sim}
+  obs: ${obs}
+  control: ${robot.control}
+  locomotion: ${locomotion.cmd}
+  locomotion_policy_control: ${locomotion.policy_control}
+  mimic: ${mimic.policy}
+  motion: ${mimic.motion}
+  teleop: ${teleop}
+  upper_dof_num: 17
+  collect_dataset: False
+
+

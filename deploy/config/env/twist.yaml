@@ -1,0 +1,12 @@
+_target_: envs.twist.TwistEnv
+_recursive_: False
+config:
+  device: ${device}
+  simulator: ${sim}
+  motion: ${mimic.motion}
+  policy: ${mimic.policy}
+  robot: ${mimic.robot}
+  metrics_path: ${mimic.metrics_path}
+  viewer: ${robot.control.viewer}
+  asset: ${robot.asset}
+  control: ${robot.control}

@@ -1,0 +1,13 @@
+_target_: envs.level_locomotion.LevelLocomotion
+_recursive_: False
+config:
+  device: ${device}
+  simulator: ${sim}
+  obs: ${obs}
+  control: ${robot.control}
+  collect_dataset: False
+
+  locomotion: ${locomotion.cmd}
+  teleop: ${teleop}
+  policy_control: ${locomotion.policy_control}
+
