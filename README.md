@@ -5,20 +5,6 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## 📖 Table of Contents
-
-- [Features](#features)
-- [Supported Robots](#supported-robots)
-- [System Architecture](#system-architecture)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage Guide](#usage-guide)
-- [Configuration](#configuration)
-- [Real Robot Deployment](#real-robot-deployment)
-- [Policy Switching](#policy-switching)
-- [Troubleshooting](#troubleshooting)
-- [Examples](#examples)
-
 ## ✨ Features
 
 - 🎯 **Unified Interface**: Same code runs in simulation and on real robots
@@ -189,40 +175,6 @@ python run.py --config-name=level_locomotion \
     simulator.config.marker=false
 ```
 
-### Creating Custom Configurations
-
-#### 1. Create Observation Configuration
-
-Create a configuration file in `config/obs/`:
-
-```yaml
-# config/obs/my_obs.yaml
-obs_auxiliary:
-  - root_quat
-  - base_lin_vel
-  - base_ang_vel
-  - dof_pos
-  - dof_vel
-
-obs_dims:
-  root_quat: 4
-  base_lin_vel: 3
-  base_ang_vel: 3
-  dof_pos: 29
-  dof_vel: 29
-```
-
-#### 2. Create Agent Configuration
-
-Create a configuration file in `config/agent/`:
-
-```yaml
-# config/agent/my_agent.yaml
-_target_: agents.level_agent.LevelAgent
-device: ${device}
-checkpoint: path/to/your/policy.pt
-```
-
 ## 🤖 Real Robot Deployment
 
 ### Step 1: Launch Transition Layer
@@ -298,6 +250,9 @@ Mimic → Locomotion:
   4. Switch PD parameters to locomotion parameters
   5. Resume locomotion control
 ```
+
+### Teleoperation
+Refer to [MOSAIC-teleop](MOSAIC-teleop/README.md) and deploy the specified environment on the local PC.
 
 ### Configuration Parameters
 
@@ -445,58 +400,6 @@ HYDRA_FULL_ERROR=1 python run.py --config-name=twist \
 - All file paths (checkpoint/motion data) should be replaced with actual paths in production use.
 - `viewer` and `real_time` are set to `False` by default to maximize evaluation efficiency.
 - Adjust `history_length` and `command_horizon` according to the actual model configuration.
-
-## 📝 Examples
-
-### Example 1: G1 Robot LEVEL Locomotion
-
-```bash
-cd deploy
-python run.py --config-name=level_locomotion \
-    asset=g1_29dof \
-    control=g1_29dof \
-    robot=g1_29dof \
-    device=cpu
-```
-
-### Example 2: H1 Robot Mosaic
-
-```bash
-cd deploy
-python run.py --config-name=mosaic \
-    asset=h1_19dof \
-    control=h1_19dof \
-    robot=h1_19dof \
-    env.config.motion.motion_path=data/motion/h1_motion.npz
-```
-
-### Example 3: Policy Switching (Simulation)
-
-```bash
-cd deploy
-python run.py --config-name=loco_mimic \
-    asset=g1_29dof \
-    control=g1_29dof \
-    robot=g1_29dof \
-    device=cpu
-```
-
-### Example 4: Real Robot Deployment
-
-```bash
-# First, launch transition layer on robot
-cd unitree_sdk2/build/bin
-./trans_wo_lock eth0
-
-# Then, on policy layer host
-cd deploy
-python run.py --config-name=loco_mimic \
-    simulator=real_world \
-    asset=g1_29dof \
-    control=g1_29dof \
-    robot=g1_29dof \
-    device=cpu
-```
 
 ## 🤝 Contributing
 
