@@ -151,7 +151,7 @@ On the real robot, use the Unitree joystick:
 - `L2` (left lower left button): Switch to Mimic policy
 
 ### Teleoperation
-Refer to [MOSAIC-teleop](https://github.com/BAAI-Humanoid/RobotBridge/tree/main/MOSAIC-teleop) and deploy the specified environment on the local PC.
+Refer to [MOSAIC-teleop](https://github.com/BAAI-Humanoid/MOSAIC-teleop.git) and deploy the specified environment on the local PC.
 
 
 ## 📚 Configuration Guide
