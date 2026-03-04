@@ -3,7 +3,7 @@
 🤖 Unified Sim2Sim and Sim2Real Deployment Framework for Humanoid Robots - Plug and Play
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://opensource.org/license/apache-2-0)
 
 ## ✨ Features
 
