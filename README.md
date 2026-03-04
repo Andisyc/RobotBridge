@@ -15,42 +15,6 @@
 - 🔧 **Flexible Configuration**: Hydra-based configuration management system
 - 📈 **Smooth Interpolation**: Automatic pose interpolation during policy transitions
 
-## 🤖 Supported Robots
-
-| Robot | DoF | Config File | Status |
-|-------|-----|------------|--------|
-| Unitree G1 (12 DoF) | 12 | `g1_12dof.yaml` | ✅ Supported |
-| Unitree G1 (29 DoF) | 29 | `g1_29dof.yaml` | ✅ Supported |
-| Unitree H1 | 19 | `h1_19dof.yaml` | ✅ Supported |
-| Unitree H1-2 | 27 | `h1_2_27dof_anneal_21dof.yaml` | ✅ Supported |
-| Adam Lite AGX | 23 | `adam_lite_agx_23dof.yaml` | ✅ Supported |
-
-## 🏗️ System Architecture
-
-```
-RobotBridge/
-├── deploy/                      # Policy Layer
-│   ├── agents/                  # Agent implementations
-│   │   ├── base_agent.py
-│   │   ├── level_agent.py
-│   │   ├── mosaic_agent.py
-│   │   └── loco_mimic_agent.py  # Policy switching agent
-│   ├── envs/                    # Environment implementations
-│   │   ├── base_env.py
-│   │   ├── level_locomotion.py
-│   │   ├── mosaic.py
-│   │   └── loco_mimic_switch.py # Policy switching environment
-│   ├── simulator/               # Simulator interfaces
-│   │   ├── mujoco.py            # MuJoCo simulation
-│   │   └── real_world.py        # Real robot interface
-│   ├── config/                  # Configuration files
-│   └── utils/                   # Utility functions
-├── unitree_sdk2/                # Transition Layer
-│   ├── trans.cpp                # C++ communication layer
-│   └── lcm_types/               # LCM message definitions
-└── external/                    # External dependencies
-```
-
 ## 📦 Installation
 
 ### Prerequisites
@@ -70,14 +34,12 @@ conda activate rb
 
 ```bash
 # Clone the repository
-git clone https://github.com/hitsunzhenguo/RobotBridge.git
+git clone https://github.com/BAAI-Humanoid/RobotBridge.git
 cd RobotBridge
 
 # Install Python dependencies
 pip install -r requirements.txt
 
-# If you encounter MuJoCo issues on Linux, export this library
-export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
 ```
 
 ### Step 3: Compile Transition Layer (Real Robot Only)
@@ -96,11 +58,12 @@ After compilation, you'll find the `trans` executable in the `bin/` directory.
 
 ### Simulation Testing
 
-#### 1. LEVEL Locomotion
+#### 1. Locomotion
 
 ```bash
+# level is just our locomotion policy, you can train yours using any open-sourced codes freely
 cd deploy
-python run.py --config-name=level_locomotion
+python run.py --config-name=level_locomotion 
 ```
 
 **Controls:**
@@ -109,15 +72,17 @@ python run.py --config-name=level_locomotion
 - `Q/E`: Rotate left/right
 - `Space`: Stop
 
-#### 2. Mosaic (Motion Imitation)
+#### 2. Motion Mimic
 
 ```bash
+# mosaic style
 cd deploy
 python run.py --config-name=mosaic \
-    env.config.motion.motion_path=data/motion/your_motion.npz
+    env.config.motion.motion_path=data/motion/your_motion.npz \
+    env.config.policy.checkpoint=data/model/your_model.onnx
 ```
 
-#### 3. Locomotion + Mimic Policy Switching
+#### 3. Locomotion + Motion Mimic Policy Switching
 
 ```bash
 cd deploy
@@ -130,7 +95,66 @@ python run.py --config-name=loco_mimic
 - `K`: Switch to Mimic policy
 - `Space`: Stop movement
 
-## 📚 Usage Guide
+### Real Robot Deployment (Unitree G1)
+
+**Important Notes:**
+- ⚠️ Must follow Unitree's recommendations for safety while using robots in low-level control (debug) mode
+- ⚠️ Must launch transition layer before policy layer
+- ⚠️ Ensure network connection is working (192.168.123.x subnet)
+- ⚠️ Test in a safe environment for first deployment
+- ⚠️ Have an emergency stop button ready
+- ⚠️ This is research code; use at your own risk; we do not take responsibility for any damage.
+
+#### Step 1: Launch Transition Layer
+
+On the robot, execute:
+
+```bash
+cd unitree_sdk2/build/bin
+
+# Check network interface
+ifconfig  # Find the interface name corresponding to 192.168.123.164 (e.g., eth0 or eth1)
+
+# Launch transition layer
+./trans_wo_lock eth0
+
+# Press ENTER to trigger communication
+# When the transition layer is runing, press [L2 + B] to stop the process,
+#                                      press [L2 + Y] to recover from stopped state
+#                                      press [L1 + B] for emergency termination.
+```
+
+#### Step 2: Launch Policy Layer
+
+In another terminal or remote host:
+
+```bash
+cd deploy
+python run.py --config-name=mosaic \
+    simulator=real_world \
+    device=cpu
+
+# Press R2 on joystick to enter prepare mode, press again to enter the policy runing mode
+# When policy is runing, pressing R2 the agent will return to prepare mode.
+```
+
+#### Step 3: Joystick Control
+
+On the real robot, use the Unitree joystick:
+
+**Stick Controls (Locomotion):**
+- Left stick: Forward/backward and left/right movement (vx, vy)
+- Right stick: Rotation (yaw)
+
+**Policy Switching Buttons (LocoMimic):**
+- `L1` (left upper button): Switch to Locomotion policy
+- `L2` (left lower left button): Switch to Mimic policy
+
+### Teleoperation
+Refer to [MOSAIC-teleop](https://github.com/BAAI-Humanoid/RobotBridge/tree/main/MOSAIC-teleop) and deploy the specified environment on the local PC.
+
+
+## 📚 Configuration Guide
 
 ### Configuration File Organization
 
@@ -175,105 +199,41 @@ python run.py --config-name=level_locomotion \
     simulator.config.marker=false
 ```
 
-## 🤖 Real Robot Deployment
-
-### Step 1: Launch Transition Layer
-
-On the robot, execute:
-
-```bash
-cd unitree_sdk2/build/bin
-
-# Check network interface
-ifconfig  # Find the interface name corresponding to 192.168.123.164 (e.g., eth0 or eth1)
-
-# Launch transition layer
-./trans_wo_lock eth0
-
-# Press ENTER to trigger communication
-```
-
-### Step 2: Launch Policy Layer
-
-In another terminal or remote host:
-
-```bash
-cd deploy
-python run.py --config-name=loco_mimic \
-    simulator=real_world \
-    device=cpu
-```
-
-**Important Notes:**
-- ⚠️ Must launch transition layer before policy layer
-- ⚠️ Ensure network connection is working (192.168.123.x subnet)
-- ⚠️ Test in a safe environment for first deployment
-- ⚠️ Have an emergency stop button ready
-
-### Step 3: Joystick Control
-
-On the real robot, use the Unitree joystick:
-
-**Stick Controls:**
-- Left stick: Forward/backward and left/right movement (vx, vy)
-- Right stick: Rotation (yaw)
-
-**Policy Switching Buttons:**
-- `L1` (left upper button): Switch to Locomotion policy
-- `L2` (left lower left button): Switch to Mimic policy
-
-## 🔄 Policy Switching
-
-### Feature Description
-
-RobotBridge supports smooth switching between locomotion and mimic policies at runtime:
-
-- **Locomotion Policy**: Controls robot movement (12 DoF lower body)
-- **Mimic Policy**: Executes pre-recorded full-body motions (29 DoF)
-- **Smooth Interpolation**: Automatic interpolation during transitions to avoid sudden pose changes
-- **Automatic Parameter Switching**: PD control parameters (kp/kd) adjust automatically with policy
-
-### Switching Flow
+## 🏗️ System Architecture
 
 ```
-Locomotion → Mimic:
-  1. Press K key (sim) or L2 button (real)
-  2. System resets motion to first frame
-  3. Interpolate 75 steps to mimic initial pose
-  4. Switch PD parameters to mimic parameters
-  5. Start executing mimic motion
-
-Mimic → Locomotion:
-  1. Press L key (sim) or L1 button (real), or automatic when motion finishes
-  2. Delay 25 steps before interpolation
-  3. Interpolate 75 steps to locomotion pose
-  4. Switch PD parameters to locomotion parameters
-  5. Resume locomotion control
+RobotBridge/
+├── deploy/                      # Policy Layer
+│   ├── agents/                  # Agent implementations
+│   │   ├── base_agent.py
+│   │   ├── level_agent.py
+│   │   ├── mosaic_agent.py
+│   │   └── loco_mimic_agent.py  # Policy switching agent
+│   ├── envs/                    # Environment implementations
+│   │   ├── base_env.py
+│   │   ├── level_locomotion.py
+│   │   ├── mosaic.py
+│   │   └── loco_mimic_switch.py # Policy switching environment
+│   ├── simulator/               # Simulator interfaces
+│   │   ├── mujoco.py            # MuJoCo simulation
+│   │   └── real_world.py        # Real robot interface
+│   ├── config/                  # Configuration files
+│   └── utils/                   # Utility functions
+├── unitree_sdk2/                # Transition Layer
+│   ├── trans.cpp                # C++ communication layer
+│   └── lcm_types/               # LCM message definitions
 ```
 
-### Teleoperation
-Refer to [MOSAIC-teleop](MOSAIC-teleop/README.md) and deploy the specified environment on the local PC.
+## 🤖 Supported Robots
 
-### Configuration Parameters
-
-Adjust interpolation duration in `agents/loco_mimic_agent.py`:
-
-```python
-class PolicyInterpManager:
-    # [start_delay, interpolation_steps, end_delay]
-    DURATIONS_LOCO_MIMIC = [0, 75, 25]   # locomotion -> mimic
-    DURATIONS_MIMIC_LOCO = [25, 75, 0]   # mimic -> locomotion
-```
-
-### Programmatic Switching
-
-You can also trigger switches programmatically in code:
-
-```python
-# During agent runtime
-agent.switch_to_mimic()      # Switch to mimic
-agent.switch_to_locomotion() # Switch to locomotion
-```
+| Robot | DoF | Config File |
+|-------|-----|------------|
+| Unitree G1 (12 DoF) | 12 | `g1_29dof_anneal_12dof.yaml` |
+| Unitree G1 (23 DoF) | 23 | `g1_29dof_anneal_23dof.yaml` |
+| Unitree G1 (29 DoF) | 29 | `g1_29dof.yaml` |
+| Unitree H1 | 19 | `h1_19dof.yaml` |
+| Unitree H1-2 | 21 | `h1_2_27dof_anneal_21dof.yaml` |
+| Adam Lite AGX | 23 | `adam_lite_agx_23dof.yaml` |
 
 ## 🐛 Troubleshooting
 
@@ -334,26 +294,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 3. If there is already sepcified network port, delete it first by running `sudo ip route del 239.255.0.0/16 dev {old network port}`
 4. You can check the result by running `ip route | grep 239`, and if you can see `239.255.0.0/16 dev {network port} scope link`, you succeed.
 
-### Debug Mode
-
-Enable verbose logging:
-
-```python
-# Add at the beginning of code
-from loguru import logger
-import sys
-
-logger.remove()
-logger.add(sys.stderr, level="DEBUG")
-```
-
-Or set environment variable:
-```bash
-export LOGURU_LEVEL=DEBUG
-python run.py --config-name=loco_mimic
-```
-
-### Evaluation Guide
+## 📌 Evaluation Guide
 #### Overview
 This guide outlines the standard procedure for running model evaluation with automatic checkpoint loading based on file extensions (ONNX/TorchScript).
 
@@ -411,6 +352,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
+- This project is build upon [Walk these ways](https://github.com/Improbable-AI/walk-these-ways)
 - Unitree Robotics for robot hardware and SDK
 - MuJoCo for physics simulation
 - Hydra for configuration management
@@ -420,9 +362,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions or suggestions, please submit an Issue or contact the maintainers.
 
 ---
-
-**Note**: Before deploying on real robots, ensure:
-1. ✅ Thoroughly tested in simulation environment
-2. ✅ Emergency stop measures prepared
-3. ✅ First test conducted in safe environment
-4. ✅ Familiar with robot operation procedures

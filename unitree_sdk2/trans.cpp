@@ -342,26 +342,23 @@ class RobotController {
                 } 
                 else {
                     if (i == 0) {
-                        // thumb_0: 旋转关节保持中位
                         cmd.motor_cmd()[i].q(mid);
                     }
                     else if (i == 1) {
-                        // 🔧 thumb_1: 左右手方向相反
                         float open_q, close_q;
 
                         if (isLeftHand) {
                             open_q = minLimits[i];   // -0.742
                             close_q = maxLimits[i];  // 1.05
                         } else {
-                            open_q = maxLimits[i];   // 0.742  ← 反向
-                            close_q = minLimits[i];  // -1.05  ← 反向
+                            open_q = maxLimits[i];   // 0.742
+                            close_q = minLimits[i];  // -1.05 
                         }
 
                         float target_q = open_q + gripRatio * (close_q - open_q);
                         cmd.motor_cmd()[i].q(target_q);
                     }
                     else if (i == 2) {
-                        // thumb_2: 从0开始（左右手逻辑相同）
                         float open_q = 0.0f;
                         float close_q = isLeftHand ? maxLimits[i] : minLimits[i];
 
@@ -373,7 +370,6 @@ class RobotController {
                         cmd.motor_cmd()[i].q(target_q);
                     }
                     else {
-                        // 中指和食指 (3-6): 从0开始
                         float open_q = 0.0f;
                         float close_q = isLeftHand ? minLimits[i] : maxLimits[i];
 
@@ -463,7 +459,6 @@ class RobotController {
                         low_cmd.motor_cmd()[i].tau() = 0;
                     }
 
-                    // 同步对手部发送阻尼指令（kp=0，kd=0.2，关节置中）
                     dexWriter();
 
                     if(l2y_edge){
