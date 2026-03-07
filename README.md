@@ -359,6 +359,6 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 
 ## 📞 Contact
 
-For questions or suggestions, please submit an Issue or contact the maintainers.
+We are hiring!!! Full-time researchers, engineers, interns and PhD students are all open for recruitment. If you are interested in working with us on whole-body mobile manipulation for humanoid robots, please contact hitsunzhenguo@gmail.com.
 
 ---
