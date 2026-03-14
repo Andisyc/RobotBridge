@@ -345,6 +345,9 @@ class GMTEnv(BaseEnv):
 
     def step(self, action):
         action = np.asarray(action, dtype=np.float32).reshape(-1)
+
+        print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
+
         if action.size != self.num_action:
             raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
 
@@ -352,9 +355,6 @@ class GMTEnv(BaseEnv):
         if self.action_clip is not None:
             action = np.clip(action, -float(self.action_clip), float(self.action_clip))
         
-        action = np.asarray(action, dtype=np.float32).reshape(-1)
-        print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
-
         target_dof_pos = action * self.action_scale + self.default_dof_pos_active
 
         print(f"[Debug] target_dof_pos: {target_dof_pos}")
