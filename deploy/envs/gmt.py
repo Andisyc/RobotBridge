@@ -290,7 +290,6 @@ class GMTEnv(BaseEnv):
             self.simulator.mujoco_data.qvel[:] = 0.0
             
             # 4. 强制运动学解算
-            import mujoco
             mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
             print("[HACK] 满血版初始位姿同步成功 (包含根节点高度)！")
         except Exception as e:
