@@ -96,9 +96,14 @@ class MotionLoader:
         """切换到下一个运动文件。如果结束则退出程序。"""
         self.current_file_idx += 1
         if self.current_file_idx >= len(self.file_list):
-            print("All motion files processed")
-            import sys
-            sys.exit(0) # 退出程序
+            # print("All motion files processed")
+            # import sys
+            # sys.exit(0) # 退出程序
+
+            # === 魔改开始：屏蔽强制退出，强制将索引归零 ===
+            print("[HACK] Motion finished! Looping back to the start...")
+            self.current_file_idx = 0 
+            # === 魔改结束 ===
         
         self._load_motion_file(self.file_list[self.current_file_idx])
         return True
@@ -639,7 +644,8 @@ class MotionDataset:
 
     def _write_metrics_to_csv(self, fail: bool = False):
         if fail:
-            self._update_metrics_single_frame()
+            # self._update_metrics_single_frame()
+            return
         # Convert tensor or numpy scalar to Python float
         row_data = {}
         for k, v in self.metrics.items():

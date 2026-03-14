@@ -2,7 +2,7 @@ policy:
   checkpoint: ./data/model/previous_work/gmt.pt
   action_scale: 0.5
   action_clip: 10.0
-  history_length: 20
+  history_length: 5 # 20
 
 metrics_path: ./logs/metrics_gmt.csv
 

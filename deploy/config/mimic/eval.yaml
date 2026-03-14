@@ -1,5 +1,5 @@
 policy:
-  checkpoint: ./data/model/stage3_student_estimator/all_motions__student__estimator__dynamic.onnx
+  checkpoint: ./data/model/gmt.onnx # stage3_student_estimator/all_motions__student__estimator__dynamic.onnx
   without_state_estimator: true
   action_beta: 1.0
   max_timestep: -1
@@ -8,7 +8,7 @@ policy:
   history_length: 5
 
 motion:
-  motion_path: ./data/motion/motionx_300_g1_npz
+  motion_path: ./data/motion/dance1_subject1.npz # motionx_300_g1_npz
   playback_speed: 1.0
   loop: false
   override_robot_anchor_pos: false

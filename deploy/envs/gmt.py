@@ -213,8 +213,34 @@ class GMTEnv(BaseEnv):
         policy_path = self.policy_cfg.get("checkpoint") or cfg_dict.get("policy_path")
         self.policy_path = _resolve_path(policy_path) if policy_path else None
         self.policy = None
-        if self.policy_path:
+
+        import onnxruntime as ort
+
+        # === 魔改开始：支持 ONNX 格式的 GMT 追踪器 ===
+        if str(self.policy_path).endswith('.onnx'):
+            print(f"[Hack] Loading ONNX policy from {self.policy_path}...")
+            class ONNXPolicyWrapper:
+                def __init__(self, path, device):
+                    self.sess = ort.InferenceSession(str(path))
+                    self.input_name = self.sess.get_inputs()[0].name
+                    self.device = device
+                    
+                def __call__(self, obs):
+                    # 将 PyTorch tensor 转为 numpy，推理后再转回 tensor
+                    obs_np = obs.detach().cpu().numpy().astype(np.float32)
+                    act_np = self.sess.run(None, {self.input_name: obs_np})[0]
+                    return torch.tensor(act_np, device=self.device)
+                    
+                def eval(self):
+                    pass # 防止后续调用 .eval() 报错
+                    
+            self.policy = ONNXPolicyWrapper(self.policy_path, self.device)
+        else:
+            # 兼容原作者的 .pt 写法
             self.policy = torch.jit.load(self.policy_path, map_location=self.device)
+        # === 魔改结束 ===
+        # if self.policy_path:
+        #     self.policy = torch.jit.load(self.policy_path, map_location=self.device)
 
         self.action_scale = float(self.policy_cfg.get("action_scale", ACTION_SCALE))
         self.action_clip = self.policy_cfg.get("action_clip", None)
@@ -296,7 +322,7 @@ class GMTEnv(BaseEnv):
         full_obs = np.concatenate([mimic_obs, obs_prop, obs_hist])
 
         self.proprio_history.append(obs_prop)
-        self.motion_loader._update_metrics()
+        # self.motion_loader._update_metrics()
 
         if getattr(self.simulator, "marker", False):
             markers_world = self._get_reference_markers_world()

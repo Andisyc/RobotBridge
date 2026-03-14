@@ -484,7 +484,7 @@ class MosaicEnv(BaseEnv):
         self.video_episode_counter += 1
 
     def save_video(self):
-        filename = f"/home/ws/hbs/RobotBridge/videos_offline/episode_{self.video_episode_counter}.mp4"
+        filename = f"/home/chengyuxuan/RobotBridge/videos_offline/episode_{self.video_episode_counter}.mp4"
         print(f"Saving video: {filename}")
         imageio.mimsave(filename, self.frames, fps=self.video_fps)
         self.frames = []

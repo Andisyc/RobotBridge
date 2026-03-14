@@ -23,8 +23,25 @@ class GMTAgent(BaseAgent):
         if len(obs_tensor.shape) == 1:
             obs_tensor = obs_tensor.unsqueeze(0)
 
+        # with torch.no_grad():
+        #     action_tensor = self.policy(obs_tensor)
+        
         with torch.no_grad():
-            action_tensor = self.policy(obs_tensor)
+            if hasattr(self.policy, 'run'):
+                # === ONNX 推理模式 ===
+                # 取出 numpy 格式的观测值喂给 ONNX
+                obs_np = obs_tensor.cpu().numpy().astype(np.float32)
+                # --- 终极保底：强制切片适配 770 维模型 ---
+                if obs_np.shape[1] > 770:
+                    obs_np = obs_np[:, :770]  # 只取前 770 维核心数据
+                # ------------------------------------
+                input_name = self.policy.get_inputs()[0].name
+                action_np = self.policy.run(None, {input_name: obs_np})[0]
+                # 把结果包回 tensor，为了完美衔接原代码第 29 行的返回逻辑
+                action_tensor = torch.tensor(action_np, device=self.device)
+            else:
+                # === 原版 PyTorch 推理模式 ===
+                action_tensor = self.policy(obs_tensor)
 
         return action_tensor.detach().cpu().numpy().squeeze()
 

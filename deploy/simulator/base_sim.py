@@ -191,6 +191,10 @@ class BaseSim:
         self._base_pos = np.array([0, 0, -0.78])
 
     def align_quat(self, quat: np.ndarray) -> np.ndarray:
+        # === 拦截：如果没有遥操基准，直接原样返回 ===
+        if not hasattr(self, '_base_rot'):
+            return quat
+        # ==========================================
         current = sRot.from_quat(quat)
         aligned = self._base_rot.inv() * current
         return aligned.as_quat()
@@ -206,6 +210,12 @@ class BaseSim:
         pos = np.asarray(pos, dtype=np.float64)
         if pos.shape[-1] != 3:
             raise ValueError(f"Expected last dim == 3 for positions, got shape={pos.shape}")
+        
+        # === 拦截：如果没有遥操位置基准，直接原样返回 ===
+        if not hasattr(self, '_base_pos') or not hasattr(self, '_base_rot'):
+            return pos.astype(np.float32)
+        # ==========================================
+
         flat = pos.reshape(-1, 3)
         rel = flat - self._base_pos.reshape(1, 3)
         aligned = self._base_rot.inv().apply(rel)

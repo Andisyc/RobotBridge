@@ -1,5 +1,5 @@
 policy:
-  checkpoint: ./data/model/ADAPT/ADAPTOR_one_stage24K_multi_distill_with_noitom_30min_GLOBAL_1K.onnx
+  checkpoint: ./data/model/gmt.onnx # ADAPT/ADAPTOR_one_stage24K_multi_distill_with_noitom_30min_GLOBAL_1K.onnx
   without_state_estimator: true
   action_beta: 1.0
   max_timestep: -1
@@ -9,7 +9,7 @@ policy:
   save_video: false
 
 motion:
-  motion_path: ./data/motion/g1_lafan_dance1_subject3.npz
+  motion_path: ./data/motion/dance1_subject1.npz
   playback_speed: 1.0
   loop: false
   override_robot_anchor_pos: false
