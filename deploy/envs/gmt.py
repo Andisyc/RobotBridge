@@ -364,7 +364,7 @@ class GMTEnv(BaseEnv):
         if self.action_clip is not None:
             action = np.clip(action, -float(self.action_clip), float(self.action_clip))
 
-        action = np.clip(action, -3.0, 3.0)
+        # action = np.clip(action, -3.0, 3.0)
         
         target_dof_pos = action * self.action_scale + self.default_dof_pos_active
 
