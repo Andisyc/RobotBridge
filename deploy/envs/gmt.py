@@ -287,7 +287,6 @@ class GMTEnv(BaseEnv):
             self.simulator.mujoco_data.qpos[3:7] = [root_quat[3], root_quat[0], root_quat[1], root_quat[2]]
             
             self.simulator.mujoco_data.qvel[:] = 0.0
-            import mujoco
             mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
         except Exception as e:
             print(f"[HACK] 初始状态同步失败: {e}")
