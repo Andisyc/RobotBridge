@@ -270,19 +270,28 @@ class GMTEnv(BaseEnv):
             )
         else:
             self.proprio_history = deque([], maxlen=0)
+        
+        # ==================== 魔改开始：强制同步初始位姿 ====================
+        try:
+            # 1. 拿到舞蹈动作的第一帧目标关节角度
+            first_jpos = self.motion_loader.joint_pos[0]
+            
+            # 2. 强行覆盖 MuJoCo 物理数据 
+            # (跳过 qpos 的前 7 个浮动基座状态: 3个xyz位置 + 4个四元数姿态)
+            self.simulator.mujoco_data.qpos[7 : 7 + self.num_action] = first_jpos
+            
+            # 3. 把关节速度全部清零，防止一出来就因为惯性乱飞
+            self.simulator.mujoco_data.qvel[:] = 0.0
+            
+            # 4. 极其关键：强制 MuJoCo 更新一次运动学正解，让身体真正"摆出"这个姿势
+            mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
+            print("[HACK] 初始肉体姿态已成功同步为舞蹈第一帧！")
+        except Exception as e:
+            print(f"[HACK] 初始姿态同步失败: {e}")
+        # ==================== 魔改结束 ====================================
+
         obs = self.compute_observation()
         self.obs_buf_dict = {"obs": obs}
-
-        # === 物理截断：强制机器人初始姿态对齐动作的第一帧 ===
-        try:
-            # 获取参考动作起始帧的关节角度 (根据你 dataset.py 的结构)
-            first_frame_qpos = self.motion_loader.joint_pos[0]
-            # 强制重置 MuJoCo 物理引擎的关节角度
-            # (注意：如果底层没有 set_dof_pos 方法，请根据 base_sim.py 尝试 set_state 或类似方法)
-            self.simulator.set_dof_pos(first_frame_qpos)
-        except Exception as e:
-            print(f"[Debug] 跳过初始姿态覆盖: {e}")
-        # ===============================================
 
         return self.obs_buf_dict
 
