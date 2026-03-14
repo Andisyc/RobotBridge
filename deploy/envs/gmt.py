@@ -272,6 +272,18 @@ class GMTEnv(BaseEnv):
             self.proprio_history = deque([], maxlen=0)
         obs = self.compute_observation()
         self.obs_buf_dict = {"obs": obs}
+
+        # === 物理截断：强制机器人初始姿态对齐动作的第一帧 ===
+        try:
+            # 获取参考动作起始帧的关节角度 (根据你 dataset.py 的结构)
+            first_frame_qpos = self.motion_loader.joint_pos[0]
+            # 强制重置 MuJoCo 物理引擎的关节角度
+            # (注意：如果底层没有 set_dof_pos 方法，请根据 base_sim.py 尝试 set_state 或类似方法)
+            self.simulator.set_dof_pos(first_frame_qpos)
+        except Exception as e:
+            print(f"[Debug] 跳过初始姿态覆盖: {e}")
+        # ===============================================
+
         return self.obs_buf_dict
 
     def _reset_envs(self, refresh):
