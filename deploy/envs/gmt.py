@@ -357,7 +357,7 @@ class GMTEnv(BaseEnv):
 
         target_dof_pos = action * self.action_scale + self.default_dof_pos_active
 
-        print(f"[Debug] target_dof_pos: {target_dof_pos:.2f}")
+        print(f"[Debug] target_dof_pos: {target_dof_pos}")
         
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
 
