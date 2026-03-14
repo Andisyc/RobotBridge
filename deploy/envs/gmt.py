@@ -274,14 +274,14 @@ class GMTEnv(BaseEnv):
         self.obs_buf_dict = {"obs": obs}
 
         # === 物理截断：强制机器人初始姿态对齐动作的第一帧 ===
-        try:
-            # 获取参考动作起始帧的关节角度 (根据你 dataset.py 的结构)
-            first_frame_qpos = self.motion_loader.joint_pos[0]
-            # 强制重置 MuJoCo 物理引擎的关节角度
-            # (注意：如果底层没有 set_dof_pos 方法，请根据 base_sim.py 尝试 set_state 或类似方法)
-            self.simulator.set_dof_pos(first_frame_qpos)
-        except Exception as e:
-            print(f"[Debug] 跳过初始姿态覆盖: {e}")
+        # try:
+        #     # 获取参考动作起始帧的关节角度 (根据你 dataset.py 的结构)
+        #     first_frame_qpos = self.motion_loader.joint_pos[0]
+        #     # 强制重置 MuJoCo 物理引擎的关节角度
+        #     # (注意：如果底层没有 set_dof_pos 方法，请根据 base_sim.py 尝试 set_state 或类似方法)
+        #     self.simulator.set_dof_pos(first_frame_qpos)
+        # except Exception as e:
+        #     print(f"[Debug] 跳过初始姿态覆盖: {e}")
         # ===============================================
 
         return self.obs_buf_dict
@@ -351,8 +351,14 @@ class GMTEnv(BaseEnv):
         self.last_action = action.copy()
         if self.action_clip is not None:
             action = np.clip(action, -float(self.action_clip), float(self.action_clip))
+        
+        action = np.asarray(action, dtype=np.float32).reshape(-1)
+        print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
 
         target_dof_pos = action * self.action_scale + self.default_dof_pos_active
+
+        print(f"[Debug] target_dof_pos: {target_dof_pos:.2f}")
+        
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
 
         self.simulator.apply_action(action_cmd)
