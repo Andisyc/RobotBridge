@@ -273,27 +273,36 @@ class GMTEnv(BaseEnv):
         
         # ==================== 魔改开始：强制同步初始位姿 ====================
         try:
-            # 1. 拿到舞蹈第一帧的 29 个关节角度
             first_jpos = self.motion_loader.joint_pos[0]
             self.simulator.mujoco_data.qpos[7 : 7 + self.num_action] = first_jpos
             
-            # 2. 极其关键：尝试拿到第一帧骨盆的根节点坐标和姿态 (Floating Base)
-            # 动捕数据里通常 body_pos_w 的第 0 个元素就是 pelvis
-            root_pos = self.motion_loader.body_pos_w[0, 0] 
-            root_quat = self.motion_loader.body_quat_w[0, 0] # 假设格式为 xyzw
+            root_pos = self.motion_loader.body_pos_w[0, 0].copy() # 复制一份，避免改坏原数据
+            root_quat = self.motion_loader.body_quat_w[0, 0]
             
-            # 强行把机器人按在正确的坐标点上 (MuJoCo 四元数格式为 wxyz)
+            # 1. 【防穿模机制】：强行把机器人的出生点抬高 5~10 厘米！
+            # 让它在第一帧是稍微悬空的，靠重力自然落到地上，绝对能防止被地底弹射！
+            root_pos[2] += 0.05  
+            
             self.simulator.mujoco_data.qpos[0:3] = root_pos
             self.simulator.mujoco_data.qpos[3:7] = [root_quat[3], root_quat[0], root_quat[1], root_quat[2]]
             
-            # 3. 清空所有速度，防止初始抽搐
             self.simulator.mujoco_data.qvel[:] = 0.0
-            
-            # 4. 强制运动学解算
+            import mujoco
             mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
-            print("[HACK] 满血版初始位姿同步成功 (包含根节点高度)！")
         except Exception as e:
-            print(f"[HACK] 根节点同步失败，可能降级回只同步关节: {e}")
+            print(f"[HACK] 初始状态同步失败: {e}")
+
+        # 2. 清空原本填满 0 的错误历史记忆
+        if self.history_len > 0:
+            self.proprio_history = deque([], maxlen=self.history_len)
+
+        # 3. 【观测记忆预热】：连续采样 N 次！
+        # 强行让机器人认为：“我在过去 5 帧里，一直静静地保持着这个舞蹈初始姿势”
+        for _ in range(self.history_len):
+            obs = self.compute_observation()
+
+        self.obs_buf_dict = {"obs": obs}
+        return self.obs_buf_dict
         # ==================== 魔改结束 ====================================
 
         obs = self.compute_observation()
