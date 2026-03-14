@@ -371,11 +371,11 @@ class GMTEnv(BaseEnv):
         return self.obs_buf_dict
 
     def _check_termination(self):
-        hard_reset = self.simulator.check_termination()
-        if hard_reset:
-            self.next_motion(fail=True)
-            self._reset_envs(True)
-            return self.compute_observation()
+        # hard_reset = self.simulator.check_termination()
+        # if hard_reset:
+        #     self.next_motion(fail=True)
+        #     self._reset_envs(True)
+        #     return self.compute_observation()
         return None
 
     def next_motion(self, fail: bool = False):
