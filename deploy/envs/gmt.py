@@ -371,65 +371,67 @@ class GMTEnv(BaseEnv):
         return full_obs
 
     def step(self, action):
-        # action = np.asarray(action, dtype=np.float32).reshape(-1)
+        action = np.asarray(action, dtype=np.float32).reshape(-1)
 
-        # # print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
+        # print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
 
-        # if action.size != self.num_action:
-        #     raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
+        if action.size != self.num_action:
+            raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
 
-        # self.last_action = action.copy()
-        # if self.action_clip is not None:
-        #     action = np.clip(action, -float(self.action_clip), float(self.action_clip))
+        self.last_action = action.copy()
+        if self.action_clip is not None:
+            action = np.clip(action, -float(self.action_clip), float(self.action_clip))
 
-        # # action = np.clip(action, -3.0, 3.0)
+        action = np.clip(action, -10.0, 10.0)
         
-        # target_dof_pos = action * self.action_scale + self.default_dof_pos_active
+        # 计算目标姿态
+        target_dof_pos = action * self.action_scale + self.default_dof_pos_active
 
-        # # print(f"[Debug] target_dof_pos: {target_dof_pos}")
+        # print(f"[Debug] target_dof_pos: {target_dof_pos}")
         
-        # action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
-
-        # self.simulator.apply_action(action_cmd)
-        # obs = self.compute_observation()
-
-        # termination_obs = self._check_termination()
-        # if termination_obs is not None:
-        #     obs = termination_obs
-
-        # self.motion_loader.post_step_callback()
-        # if self.motion_loader.cur_motion_end:
-        #     self.motion_loader.next_motion(fail=False)
-        #     return self.reset()
-
-        # self.obs_buf_dict = {"obs": obs}
-        # return self.obs_buf_dict
-    
-        # === 测试一：切除大脑，纯物理 PD 追踪 ===
-        
-        # 1. 安全获取当前帧，防止数组越界
-        max_frame = len(self.motion_loader.joint_pos) - 1
-        current_frame = min(self._my_frame_idx, max_frame)
-        
-        # 2. 获取标准答案，并让计数器 +1 准备下一帧
-        target_dof_pos = self.motion_loader.joint_pos[current_frame]
-        self._my_frame_idx += 1
-        
-        # 3. 换算并发送给 MuJoCo
+        # 换算成 MuJoCo 底层指令
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
         self.simulator.apply_action(action_cmd)
-        
-        # === 以下保持正常流程 ===
+
+        # === 环境步进与状态更新 ===
         obs = self.compute_observation()
         termination_obs = self._check_termination()
         if termination_obs is not None:
             obs = termination_obs
+
         self.motion_loader.post_step_callback()
         if self.motion_loader.cur_motion_end:
             self.motion_loader.next_motion(fail=False)
             return self.reset()
+
         self.obs_buf_dict = {"obs": obs}
         return self.obs_buf_dict
+    
+        # === 测试一：切除大脑，纯物理 PD 追踪 ===
+        
+        # # 1. 安全获取当前帧，防止数组越界
+        # max_frame = len(self.motion_loader.joint_pos) - 1
+        # current_frame = min(self._my_frame_idx, max_frame)
+        
+        # # 2. 获取标准答案，并让计数器 +1 准备下一帧
+        # target_dof_pos = self.motion_loader.joint_pos[current_frame]
+        # self._my_frame_idx += 1
+        
+        # # 3. 换算并发送给 MuJoCo
+        # action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
+        # self.simulator.apply_action(action_cmd)
+        
+        # # === 以下保持正常流程 ===
+        # obs = self.compute_observation()
+        # termination_obs = self._check_termination()
+        # if termination_obs is not None:
+        #     obs = termination_obs
+        # self.motion_loader.post_step_callback()
+        # if self.motion_loader.cur_motion_end:
+        #     self.motion_loader.next_motion(fail=False)
+        #     return self.reset()
+        # self.obs_buf_dict = {"obs": obs}
+        # return self.obs_buf_dict
 
     def _check_termination(self):
         # hard_reset = self.simulator.check_termination()
