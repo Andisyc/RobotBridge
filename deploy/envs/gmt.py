@@ -285,7 +285,7 @@ class GMTEnv(BaseEnv):
             root_pos[2] += 0.05  # 防穿模抬高 5cm
             
             self.simulator.mujoco_data.qpos[0:3] = root_pos
-            self.simulator.mujoco_data.qpos[3:7] = [root_quat[3], root_quat[0], root_quat[1], root_quat[2]]
+            self.simulator.mujoco_data.qpos[3:7] = root_quat
             self.simulator.mujoco_data.qvel[:] = 0.0
             
             mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
