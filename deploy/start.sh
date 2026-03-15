@@ -8,7 +8,7 @@
 #     robot.control.real_time=False \
 #     mimic.motion.motion_path=/path/to/motion/path
 
-# HYDRA_FULL_ERROR=1 python run.py --config-name=eval \
+HYDRA_FULL_ERROR=1 python run.py --config-name=eval \
     mimic.policy.checkpoint=./data/model/gmt.onnx \
     mimic.policy.use_estimator=False \
     robot.control.viewer=True \
