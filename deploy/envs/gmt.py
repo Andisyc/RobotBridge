@@ -367,37 +367,61 @@ class GMTEnv(BaseEnv):
         return full_obs
 
     def step(self, action):
-        action = np.asarray(action, dtype=np.float32).reshape(-1)
+        # action = np.asarray(action, dtype=np.float32).reshape(-1)
 
-        # print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
+        # # print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
 
-        if action.size != self.num_action:
-            raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
+        # if action.size != self.num_action:
+        #     raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
 
-        self.last_action = action.copy()
-        if self.action_clip is not None:
-            action = np.clip(action, -float(self.action_clip), float(self.action_clip))
+        # self.last_action = action.copy()
+        # if self.action_clip is not None:
+        #     action = np.clip(action, -float(self.action_clip), float(self.action_clip))
 
-        # action = np.clip(action, -3.0, 3.0)
+        # # action = np.clip(action, -3.0, 3.0)
         
-        target_dof_pos = action * self.action_scale + self.default_dof_pos_active
+        # target_dof_pos = action * self.action_scale + self.default_dof_pos_active
 
-        # print(f"[Debug] target_dof_pos: {target_dof_pos}")
+        # # print(f"[Debug] target_dof_pos: {target_dof_pos}")
         
+        # action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
+
+        # self.simulator.apply_action(action_cmd)
+        # obs = self.compute_observation()
+
+        # termination_obs = self._check_termination()
+        # if termination_obs is not None:
+        #     obs = termination_obs
+
+        # self.motion_loader.post_step_callback()
+        # if self.motion_loader.cur_motion_end:
+        #     self.motion_loader.next_motion(fail=False)
+        #     return self.reset()
+
+        # self.obs_buf_dict = {"obs": obs}
+        # return self.obs_buf_dict
+    
+        # === 测试一：切除神经网络，直接用物理公式追踪目标！ ===
+        # 我们根本不看传进来的 action！
+        
+        # 1. 直接从运动数据集里拿到当前帧的“标准答案”
+        target_dof_pos = self.motion_loader.joint_pos[self.motion_loader.cur_frame]
+        
+        # 2. 按照引擎需要的格式计算底层指令
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
-
+        
+        # 3. 发送给 MuJoCo 执行
         self.simulator.apply_action(action_cmd)
+        
+        # 保持环境运行的必要代码
         obs = self.compute_observation()
-
         termination_obs = self._check_termination()
         if termination_obs is not None:
             obs = termination_obs
-
         self.motion_loader.post_step_callback()
         if self.motion_loader.cur_motion_end:
             self.motion_loader.next_motion(fail=False)
             return self.reset()
-
         self.obs_buf_dict = {"obs": obs}
         return self.obs_buf_dict
 
