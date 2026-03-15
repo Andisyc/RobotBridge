@@ -20,11 +20,11 @@ motion:
   motion_path: ./data/motion/lafan_g1_npz/g1__jumps1_subject1.npz
   playback_speed: 1.0
   loop: true
-  total_dof: 23
-  dof: 23
-  ref_dof: 23
+  total_dof: 29
+  dof: 29
+  ref_dof: 29
   gym_idx: true
-  zero_padding_list: []
+  zero_padding_list: [19, 20, 21, 26, 27, 28]
   override_robot_anchor_pos: false
   interp_steps: 0
   anchor_body_name: "torso_link"
