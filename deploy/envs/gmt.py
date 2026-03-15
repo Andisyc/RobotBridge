@@ -270,48 +270,11 @@ class GMTEnv(BaseEnv):
             )
         else:
             self.proprio_history = deque([], maxlen=0)
-        
-        # ==================== 魔改开始：强制同步初始位姿 ====================
-        try:
-            first_jpos = self.motion_loader.joint_pos[0]
-            self.simulator.mujoco_data.qpos[7 : 7 + self.num_action] = first_jpos
-            
-            # 自动适应矩阵维度：如果是 2D 取 [0]，如果是 3D 取 [0, 0]
-            pos_w = np.array(self.motion_loader.body_pos_w)
-            quat_w = np.array(self.motion_loader.body_quat_w)
-            root_pos = pos_w[0, 0].copy() if pos_w.ndim == 3 else pos_w[0].copy()
-            root_quat = quat_w[0, 0] if quat_w.ndim == 3 else quat_w[0]
-            
-            root_pos[2] += 0.05  # 防穿模抬高 5cm
-            
-            self.simulator.mujoco_data.qpos[0:3] = root_pos
-            self.simulator.mujoco_data.qpos[3:7] = root_quat
-            self.simulator.mujoco_data.qvel[:] = 0.0
-            
-            mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
-        except Exception as e:
-            print(f"[HACK] 初始状态同步失败: {e}")
 
-        # 2. 清空原本填满 0 的错误历史记忆
-        if self.history_len > 0:
-            self.proprio_history = deque([], maxlen=self.history_len)
-
-        # 3. 【观测记忆预热】：连续采样 N 次！
-        # 强行让机器人认为：“我在过去 5 帧里，一直静静地保持着这个舞蹈初始姿势”
-        for _ in range(self.history_len):
-            obs = self.compute_observation()
-
-        # 新增：我们自己维护一个极其可靠的帧计数器！
-        self._my_frame_idx = 0
-
+        obs = self.compute_observation()
         self.obs_buf_dict = {"obs": obs}
+
         return self.obs_buf_dict
-        # ==================== 魔改结束 ====================================
-
-        # obs = self.compute_observation()
-        # self.obs_buf_dict = {"obs": obs}
-
-        # return self.obs_buf_dict
 
     def _reset_envs(self, refresh):
         mujoco.mj_resetData(self.simulator.mujoco_model, self.simulator.mujoco_data)
@@ -373,21 +336,15 @@ class GMTEnv(BaseEnv):
     def step(self, action):
         action = np.asarray(action, dtype=np.float32).reshape(-1)
 
-        # print(f"[Debug] Raw action max: {action.max():.2f}, min: {action.min():.2f}")
-
         if action.size != self.num_action:
             raise ValueError(f"Expected action size {self.num_action}, got {action.size}.")
 
         self.last_action = action.copy()
         if self.action_clip is not None:
             action = np.clip(action, -float(self.action_clip), float(self.action_clip))
-
-        action = np.clip(action, -10.0, 10.0)
         
         # 计算目标姿态
         target_dof_pos = action * self.action_scale + self.default_dof_pos_active
-
-        # print(f"[Debug] target_dof_pos: {target_dof_pos}")
         
         # 换算成 MuJoCo 底层指令
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
@@ -406,32 +363,6 @@ class GMTEnv(BaseEnv):
 
         self.obs_buf_dict = {"obs": obs}
         return self.obs_buf_dict
-    
-        # === 测试一：切除大脑，纯物理 PD 追踪 ===
-        
-        # # 1. 安全获取当前帧，防止数组越界
-        # max_frame = len(self.motion_loader.joint_pos) - 1
-        # current_frame = min(self._my_frame_idx, max_frame)
-        
-        # # 2. 获取标准答案，并让计数器 +1 准备下一帧
-        # target_dof_pos = self.motion_loader.joint_pos[current_frame]
-        # self._my_frame_idx += 1
-        
-        # # 3. 换算并发送给 MuJoCo
-        # action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
-        # self.simulator.apply_action(action_cmd)
-        
-        # # === 以下保持正常流程 ===
-        # obs = self.compute_observation()
-        # termination_obs = self._check_termination()
-        # if termination_obs is not None:
-        #     obs = termination_obs
-        # self.motion_loader.post_step_callback()
-        # if self.motion_loader.cur_motion_end:
-        #     self.motion_loader.next_motion(fail=False)
-        #     return self.reset()
-        # self.obs_buf_dict = {"obs": obs}
-        # return self.obs_buf_dict
 
     def _check_termination(self):
         # hard_reset = self.simulator.check_termination()

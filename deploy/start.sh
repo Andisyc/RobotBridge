@@ -11,8 +11,8 @@
 # HYDRA_FULL_ERROR=1 python run.py --config-name=eval \
     mimic.policy.checkpoint=./data/model/gmt.onnx \
     mimic.policy.use_estimator=False \
-    robot.control.viewer=False \
-    robot.control.real_time=False \
+    robot.control.viewer=True \
+    robot.control.real_time=True \
     mimic.motion.motion_path=./data/motion/dance1_subject1.npz \
     mimic.policy.history_length=5 \
     mimic.policy.eval_mode=True \
