@@ -276,17 +276,19 @@ class GMTEnv(BaseEnv):
             first_jpos = self.motion_loader.joint_pos[0]
             self.simulator.mujoco_data.qpos[7 : 7 + self.num_action] = first_jpos
             
-            root_pos = self.motion_loader.body_pos_w[0, 0].copy() # 复制一份，避免改坏原数据
-            root_quat = self.motion_loader.body_quat_w[0, 0]
+            # 自动适应矩阵维度：如果是 2D 取 [0]，如果是 3D 取 [0, 0]
+            pos_w = np.array(self.motion_loader.body_pos_w)
+            quat_w = np.array(self.motion_loader.body_quat_w)
+            root_pos = pos_w[0, 0].copy() if pos_w.ndim == 3 else pos_w[0].copy()
+            root_quat = quat_w[0, 0] if quat_w.ndim == 3 else quat_w[0]
             
-            # 1. 【防穿模机制】：强行把机器人的出生点抬高 5~10 厘米！
-            # 让它在第一帧是稍微悬空的，靠重力自然落到地上，绝对能防止被地底弹射！
-            root_pos[2] += 0.05  
+            root_pos[2] += 0.05  # 防穿模抬高 5cm
             
             self.simulator.mujoco_data.qpos[0:3] = root_pos
             self.simulator.mujoco_data.qpos[3:7] = [root_quat[3], root_quat[0], root_quat[1], root_quat[2]]
-            
             self.simulator.mujoco_data.qvel[:] = 0.0
+            
+            import mujoco
             mujoco.mj_forward(self.simulator.mujoco_model, self.simulator.mujoco_data)
         except Exception as e:
             print(f"[HACK] 初始状态同步失败: {e}")
@@ -300,14 +302,17 @@ class GMTEnv(BaseEnv):
         for _ in range(self.history_len):
             obs = self.compute_observation()
 
+        # 新增：我们自己维护一个极其可靠的帧计数器！
+        self._my_frame_idx = 0
+
         self.obs_buf_dict = {"obs": obs}
         return self.obs_buf_dict
         # ==================== 魔改结束 ====================================
 
-        obs = self.compute_observation()
-        self.obs_buf_dict = {"obs": obs}
+        # obs = self.compute_observation()
+        # self.obs_buf_dict = {"obs": obs}
 
-        return self.obs_buf_dict
+        # return self.obs_buf_dict
 
     def _reset_envs(self, refresh):
         mujoco.mj_resetData(self.simulator.mujoco_model, self.simulator.mujoco_data)
@@ -401,19 +406,21 @@ class GMTEnv(BaseEnv):
         # self.obs_buf_dict = {"obs": obs}
         # return self.obs_buf_dict
     
-        # === 测试一：切除神经网络，直接用物理公式追踪目标！ ===
-        # 我们根本不看传进来的 action！
+        # === 测试一：切除大脑，纯物理 PD 追踪 ===
         
-        # 1. 直接从运动数据集里拿到当前帧的“标准答案”
-        target_dof_pos = self.motion_loader.joint_pos[self.motion_loader.cur_frame]
+        # 1. 安全获取当前帧，防止数组越界
+        max_frame = len(self.motion_loader.joint_pos) - 1
+        current_frame = min(self._my_frame_idx, max_frame)
         
-        # 2. 按照引擎需要的格式计算底层指令
+        # 2. 获取标准答案，并让计数器 +1 准备下一帧
+        target_dof_pos = self.motion_loader.joint_pos[current_frame]
+        self._my_frame_idx += 1
+        
+        # 3. 换算并发送给 MuJoCo
         action_cmd = (target_dof_pos - self.default_angles[self.active_dof_idx]) / self.sim_action_scale
-        
-        # 3. 发送给 MuJoCo 执行
         self.simulator.apply_action(action_cmd)
         
-        # 保持环境运行的必要代码
+        # === 以下保持正常流程 ===
         obs = self.compute_observation()
         termination_obs = self._check_termination()
         if termination_obs is not None:
