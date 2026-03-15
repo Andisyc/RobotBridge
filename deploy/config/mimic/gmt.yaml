@@ -33,7 +33,7 @@ motion:
   dof: 29
   ref_dof: 29
   gym_idx: true
-  zero_padding_list: [19, 20, 21, 26, 27, 28]
+  zero_padding_list: []
   override_robot_anchor_pos: false
   interp_steps: 0
   anchor_body_name: "torso_link"
