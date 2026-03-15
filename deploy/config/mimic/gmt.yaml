@@ -15,6 +15,15 @@ metrics_path: ./logs/metrics_gmt.csv
 #     0.0, -0.4, 0.0, 1.2
 #   ]
 
+robot:
+  default_dof_pos: [
+    -0.2, 0.0, 0.0, 0.4, -0.2, 0.0,   # 左腿 6
+    -0.2, 0.0, 0.0, 0.4, -0.2, 0.0,   # 右腿 6
+    0.0, 0.0, 0.0,                    # 腰部 3
+    0.0, 0.4, 0.0, 1.2, 0.0, 0.0, 0.0, # 左臂 4 + 补齐左手腕 3
+    0.0, -0.4, 0.0, 1.2, 0.0, 0.0, 0.0 # 右臂 4 + 补齐右手腕 3
+  ]
+
 motion:
   # motion_path: ./data/motion/lafan_npz_10s_wo_getup
   motion_path: ./data/motion/lafan_g1_npz/g1__jumps1_subject1.npz
