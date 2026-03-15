@@ -1,19 +1,10 @@
-# defaults:
-#   - _self_
-#   - robot: g1_29dof
-#   - obs: mosaic
-#   - sim: mujoco
-#   - env: mosaic
-#   - agent: mosaic
-#   - mimic: eval
-
 defaults:
   - _self_
   - robot: g1_29dof
-  - obs: gmt
+  - obs: mosaic
   - sim: mujoco
-  - env: gmt
-  - agent: gmt
+  - env: mosaic
+  - agent: mosaic
   - mimic: eval
 
 device: cpu
