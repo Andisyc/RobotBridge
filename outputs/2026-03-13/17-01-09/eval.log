@@ -1,0 +1,2 @@
+2026-03-13 17:01:09.427 | INFO     | __main__:main:27 - Log saved to /home/chengyuxuan/RobotBridge/outputs/2026-03-13/17-01-09/eval.log
+2026-03-13 17:01:10.396 | INFO     | utils.motion_lib.torch_humanoid_batch:<module>:41 - Using Humanoid Batch

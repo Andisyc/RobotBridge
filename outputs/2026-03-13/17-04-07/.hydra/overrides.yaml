@@ -1,0 +1,2 @@
+- ++env.config.motion.motion_path=./motion_npz/dance1_subject1.npz
+- ++env.config.policy.checkpoint=./model/gmt.onnx

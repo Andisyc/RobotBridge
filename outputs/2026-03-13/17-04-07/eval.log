@@ -1,0 +1,39 @@
+2026-03-13 17:04:07.280 | INFO     | __main__:main:27 - Log saved to /home/chengyuxuan/RobotBridge/outputs/2026-03-13/17-04-07/eval.log
+2026-03-13 17:04:08.175 | INFO     | utils.motion_lib.torch_humanoid_batch:<module>:41 - Using Humanoid Batch
+2026-03-13 17:04:08.285 | DEBUG    | utils.kinematics:__init__:34 - [MujocoKinematics] loaded model from ./deploy/data/assets/g1/g1_29dof.xml
+2026-03-13 17:04:08.285 | DEBUG    | utils.kinematics:update_joint_names_subset:94 - [MujocoKinematics] set fk with 29 joints
+2026-03-13 17:04:08.285 | INFO     | simulator.base_sim:_setup:41 - Robot-level Control Frequency Set to 200.0HZ
+2026-03-13 17:04:08.285 | INFO     | simulator.base_sim:_setup:42 - Policy-level Control Frequency Set to 50.0HZ
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_hip_pitch_joint  Default Angles -0.10000000149011612  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_hip_roll_joint  Default Angles 0.0  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_hip_yaw_joint  Default Angles 0.0  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_knee_joint  Default Angles 0.30000001192092896  P_gain 150.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_ankle_pitch_joint  Default Angles -0.20000000298023224  P_gain 40.0  D_gain 2.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_ankle_roll_joint  Default Angles 0.0  P_gain 40.0  D_gain 2.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_hip_pitch_joint  Default Angles -0.10000000149011612  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_hip_roll_joint  Default Angles 0.0  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_hip_yaw_joint  Default Angles 0.0  P_gain 100.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_knee_joint  Default Angles 0.30000001192092896  P_gain 150.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_ankle_pitch_joint  Default Angles -0.20000000298023224  P_gain 40.0  D_gain 2.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_ankle_roll_joint  Default Angles 0.0  P_gain 40.0  D_gain 2.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint waist_yaw_joint  Default Angles 0.0  P_gain 400.0  D_gain 5.0 
+2026-03-13 17:04:08.286 | INFO     | simulator.base_sim:_load_asset:55 - Joint waist_roll_joint  Default Angles 0.0  P_gain 400.0  D_gain 5.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint waist_pitch_joint  Default Angles 0.0  P_gain 400.0  D_gain 5.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_shoulder_pitch_joint  Default Angles 0.20000000298023224  P_gain 100.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_shoulder_roll_joint  Default Angles 0.20000000298023224  P_gain 100.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_shoulder_yaw_joint  Default Angles 0.0  P_gain 50.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_elbow_joint  Default Angles 0.8999999761581421  P_gain 50.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_wrist_roll_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_wrist_pitch_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint left_wrist_yaw_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_shoulder_pitch_joint  Default Angles 0.20000000298023224  P_gain 100.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_shoulder_roll_joint  Default Angles -0.20000000298023224  P_gain 100.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_shoulder_yaw_joint  Default Angles 0.0  P_gain 50.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_elbow_joint  Default Angles 0.8999999761581421  P_gain 50.0  D_gain 2.0 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_wrist_roll_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_wrist_pitch_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:55 - Joint right_wrist_yaw_joint  Default Angles 0.0  P_gain 20.0  D_gain 0.5 
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:56 - Total Number of dof: 29
+2026-03-13 17:04:08.287 | INFO     | simulator.base_sim:_load_asset:57 - Number of Action: 29
+2026-03-13 17:04:08.288 | INFO     | utils.history_handler:__init__:19 - History Handler initialized!
+2026-03-13 17:04:08.288 | INFO     | utils.dataset:__init__:315 - Loading Mosaic motion: ./motion_npz/dance1_subject1.npz
