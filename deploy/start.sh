@@ -20,8 +20,8 @@
 
 # GMT Evaluation
 HYDRA_FULL_ERROR=1 export LIBGL_ALWAYS_SOFTWARE=1 && python run.py --config-name=gmt sim=mujoco robot=g1_29dof \
-    mimic.policy.checkpoint=./data/model/gmt.onnx \
+    mimic.policy.checkpoint=./data/model/model_27000.pt \
     robot.control.viewer=True \
     robot.control.real_time=True \
     mimic.motion.loop=True \
-    mimic.motion.motion_path=./data/motion/dance1_subject1.npz
+    mimic.motion.motion_path=./data/motion/amass_g1_Kniebeuge01_poses.npz
