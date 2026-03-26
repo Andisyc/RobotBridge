@@ -237,6 +237,7 @@ class GMTEnv(BaseEnv):
             self.policy = ONNXPolicyWrapper(self.policy_path, self.device)
         else:
             # 兼容原作者的 .pt 写法
+            print(f"\n self.policy_path: {self.policy_path} \n")
             self.policy = torch.jit.load(self.policy_path, map_location=self.device)
         # === 魔改结束 ===
         # if self.policy_path:
