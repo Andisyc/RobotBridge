@@ -9,7 +9,7 @@
 #     mimic.motion.motion_path=/path/to/motion/path
 
 HYDRA_FULL_ERROR=1 python run.py --config-name=eval \
-    mimic.policy.checkpoint=./data/model/model_27000.pt \
+    mimic.policy.checkpoint=./data/model/model_27000.onnx \
     mimic.policy.use_estimator=False \
     robot.control.viewer=True \
     robot.control.real_time=True \

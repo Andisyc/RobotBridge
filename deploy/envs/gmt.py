@@ -217,28 +217,28 @@ class GMTEnv(BaseEnv):
         if self.policy_path:
             policy_path_str = str(self.policy_path)
             try:
-                print(f"[INFO] 尝试作为 TorchScript JIT 模型加载: {policy_path_str}")
+                print(f"[INFO] Try to load as TorchScript JIT: {policy_path_str}")
                 self.policy = torch.jit.load(policy_path_str, map_location=self.device)
             except RuntimeError as e:
-                print(f"[WARNING] torch.jit.load 失败。诊断信息: {e}")
+                print(f"[WARNING] torch.jit.load failed. Exception: {e}")
                 
                 # 检查是否是 Git LFS 指针文件
                 file_size = os.path.getsize(policy_path_str)
                 if file_size < 2000:
-                    raise RuntimeError(f"严重错误: {policy_path_str} 的文件大小只有 {file_size} 字节！"
-                                       "这极可能是一个 Git LFS 文本指针文件。请在代码库根目录运行 `git lfs pull` 来拉取真实权重。")
+                    raise RuntimeError(f"Server Error: {policy_path_str} file only have {file_size} bytes!"
+                                       "This file is very likely a Git LFS file highly. Plz run 'git lfs pull' to pull the real weights.")
                 
-                print("[INFO] 尝试作为普通 PyTorch 文件加载以诊断内容...")
+                print("[INFO] Try to load as normal PyTorch file to diagnosis...")
                 loaded_obj = torch.load(policy_path_str, map_location=self.device)
                 
                 if isinstance(loaded_obj, dict):
-                    raise ValueError(f"加载失败: {policy_path_str} 实际上是一个 state_dict (纯权重字典)，而不是 JIT 模型。\n"
-                                     "对于 RobotBridge 部署框架，策略文件必须是通过 torch.jit.trace 导出的完整模型。")
+                    raise ValueError(f"Load failed: {policy_path_str} is a state_dict instead of JIT. \n"
+                                     "As for RobotBridge, policy has to exported as torch.jit.trace.")
                 elif isinstance(loaded_obj, torch.nn.Module):
                     self.policy = loaded_obj
-                    print("[INFO] 成功作为普通 PyTorch 模型加载。")
+                    print("[INFO] Successful load as normal PyTorch model.")
                 else:
-                    raise ValueError(f"未知模型内容，类型为: {type(loaded_obj)}")
+                    raise ValueError(f"Unknow model type as: {type(loaded_obj)}")
 
         self.action_scale = float(self.policy_cfg.get("action_scale", ACTION_SCALE))
         self.action_clip = self.policy_cfg.get("action_clip", None)
