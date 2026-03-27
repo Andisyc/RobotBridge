@@ -9,6 +9,9 @@ import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 
+from loguru import logger
+import onnxruntime as ort
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
@@ -216,29 +219,39 @@ class GMTEnv(BaseEnv):
 
         if self.policy_path:
             policy_path_str = str(self.policy_path)
-            try:
-                print(f"[INFO] Try to load as TorchScript JIT: {policy_path_str}")
-                self.policy = torch.jit.load(policy_path_str, map_location=self.device)
-            except RuntimeError as e:
-                print(f"[WARNING] torch.jit.load failed. Exception: {e}")
+
+            print(f"\n policy_path_str {policy_path_str} \n")
+
+            file_ext = os.path.splitext(policy_path_str)[1].lower()
+
+            print(f"\n file_ext {file_ext} \n")
+
+            if file_ext == '.onnx':
+                self.load_onnx_policy(policy_path_str)
+
+            # try:
+            #     print(f"[INFO] Try to load as TorchScript JIT: {policy_path_str}")
+            #     self.policy = torch.jit.load(policy_path_str, map_location=self.device)
+            # except RuntimeError as e:
+            #     print(f"[WARNING] torch.jit.load failed. Exception: {e}")
                 
-                # 检查是否是 Git LFS 指针文件
-                file_size = os.path.getsize(policy_path_str)
-                if file_size < 2000:
-                    raise RuntimeError(f"Server Error: {policy_path_str} file only have {file_size} bytes!"
-                                       "This file is very likely a Git LFS file highly. Plz run 'git lfs pull' to pull the real weights.")
+            #     # 检查是否是 Git LFS 指针文件
+            #     file_size = os.path.getsize(policy_path_str)
+            #     if file_size < 2000:
+            #         raise RuntimeError(f"Server Error: {policy_path_str} file only have {file_size} bytes!"
+            #                            "This file is very likely a Git LFS file highly. Plz run 'git lfs pull' to pull the real weights.")
                 
-                print("[INFO] Try to load as normal PyTorch file to diagnosis...")
-                loaded_obj = torch.load(policy_path_str, map_location=self.device)
+            #     print("[INFO] Try to load as normal PyTorch file to diagnosis...")
+            #     loaded_obj = torch.load(policy_path_str, map_location=self.device)
                 
-                if isinstance(loaded_obj, dict):
-                    raise ValueError(f"Load failed: {policy_path_str} is a state_dict instead of JIT. \n"
-                                     "As for RobotBridge, policy has to exported as torch.jit.trace.")
-                elif isinstance(loaded_obj, torch.nn.Module):
-                    self.policy = loaded_obj
-                    print("[INFO] Successful load as normal PyTorch model.")
-                else:
-                    raise ValueError(f"Unknow model type as: {type(loaded_obj)}")
+            #     if isinstance(loaded_obj, dict):
+            #         raise ValueError(f"Load failed: {policy_path_str} is a state_dict instead of JIT. \n"
+            #                          "As for RobotBridge, policy has to exported as torch.jit.trace.")
+            #     elif isinstance(loaded_obj, torch.nn.Module):
+            #         self.policy = loaded_obj
+            #         print("[INFO] Successful load as normal PyTorch model.")
+            #     else:
+            #         raise ValueError(f"Unknow model type as: {type(loaded_obj)}")
 
         self.action_scale = float(self.policy_cfg.get("action_scale", ACTION_SCALE))
         self.action_clip = self.policy_cfg.get("action_clip", None)
@@ -256,11 +269,24 @@ class GMTEnv(BaseEnv):
         self.last_action = np.zeros(self.num_action, dtype=np.float32)
         self.obs_buf_dict = {}
 
+    def load_onnx_policy(self, onnx_ckpt_path):
+        """Load an ONNX checkpoint."""
+        self.policy = ort.InferenceSession(onnx_ckpt_path)
+        logger.info(f'Loading ONNX Checkpoint from {onnx_ckpt_path}')
+
     def reset(self):
         mujoco.mj_resetData(self.simulator.mujoco_model, self.simulator.mujoco_data)
         self.motion_loader.reset()
         self.motion_loader.cur_motion_end = False
         self.last_action.fill(0)
+
+        print(f"\n history_len={self.history_len} \n")
+
+        # temp = 1
+        # assert temp == 2
+
+        self.history_len = 0
+
         if self.history_len > 0:
             self.proprio_history = deque(
                 [np.zeros(self.n_proprio, dtype=np.float32) for _ in range(self.history_len)],
@@ -307,18 +333,24 @@ class GMTEnv(BaseEnv):
             if 0 <= idx < obs_dof_vel.shape[0]:
                 obs_dof_vel[idx] = 0.0
 
+        # 本体感知: 共92 dim
         obs_prop = np.concatenate(
             [
-                sim.base_ang_vel * 0.25,
-                rpy[:2],
-                (sim.dof_pos - self.default_dof_pos_active),
-                obs_dof_vel * 0.05,
-                self.last_action,
+                sim.base_ang_vel * 0.25, # 机身的3 dim角速度乘以0.25缩放系数
+                rpy[:2], # 机身翻滚角Roll和俯仰角Pitch, 共2 dim
+                (sim.dof_pos - self.default_dof_pos_active), # 当前关节角与默认关节角差值, 29 dim
+                obs_dof_vel * 0.05, # 关节速度, 29 dim
+                self.last_action, # 上帧动作指令, 29 dim
             ]
         ).astype(np.float32)
 
+        # 参考动作: Tracking Policy需要接收的未来帧参考动作
         mimic_obs = self.motion_loader.get_mimic_obs(control_dt=self.simulator.high_dt)
+
+        # 历史观测: 历史本体感知, 每帧92 dim, 历史帧长度可设定
         obs_hist = np.array(self.proprio_history, dtype=np.float32).flatten()
+
+        # 总观测量 = 参考动作 + 本体感知 + 历史观测
         full_obs = np.concatenate([mimic_obs, obs_prop, obs_hist])
 
         self.proprio_history.append(obs_prop)
