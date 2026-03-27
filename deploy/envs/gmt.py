@@ -214,56 +214,31 @@ class GMTEnv(BaseEnv):
         self.policy_path = _resolve_path(policy_path) if policy_path else None
         self.policy = None
 
-        import onnxruntime as ort
-
-        # === 魔改开始：支持 ONNX 格式的 GMT 追踪器 ===
-        # if str(self.policy_path).endswith('.onnx'):
-        #     print(f"[Hack] Loading ONNX policy from {self.policy_path}...")
-        #     class ONNXPolicyWrapper:
-        #         def __init__(self, path, device):
-        #             self.sess = ort.InferenceSession(str(path))
-        #             self.input_name = self.sess.get_inputs()[0].name
-        #             self.device = device
-                    
-        #         def __call__(self, obs):
-        #             # 将 PyTorch tensor 转为 numpy，推理后再转回 tensor
-        #             obs_np = obs.detach().cpu().numpy().astype(np.float32)
-        #             act_np = self.sess.run(None, {self.input_name: obs_np})[0]
-        #             return torch.tensor(act_np, device=self.device)
-                    
-        #         def eval(self):
-        #             pass # 防止后续调用 .eval() 报错
-                    
-        #     self.policy = ONNXPolicyWrapper(self.policy_path, self.device)
-        # else:
-        #     # 兼容原作者的 .pt 写法
-        #     print(f"\n self.policy_path: {self.policy_path} \n")
-        #     self.policy = torch.jit.load(self.policy_path, map_location=self.device)
-        # === 魔改结束 ===
-        
-        # if str(self.policy_path).endswith('.onnx'):
-        #     import onnxruntime as ort
-        #     class ONNXPolicy:
-        #         def __init__(self, path, device):
-        #             # 加载 ONNX 运行时
-        #             self.session = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
-        #             self.input_name = self.session.get_inputs()[0].name
-        #             self.device = device
-                    
-        #         def __call__(self, obs_tensor):
-        #             # 拦截输入：转 numpy -> ONNX 推理 -> 转回 tensor
-        #             obs_np = obs_tensor.detach().cpu().numpy()
-        #             action_np = self.session.run(None, {self.input_name: obs_np})[0]
-        #             return torch.tensor(action_np, dtype=torch.float32, device=self.device)
-            
-        #     self.policy = ONNXPolicy(self.policy_path, self.device)
-        #     print(f"\n[INFO] 成功挂载 ONNX Runtime 推理引擎: {self.policy_path}\n")
-        # else:
-        #     # 保留原有的 JIT 加载逻辑
-        #     self.policy = torch.jit.load(self.policy_path, map_location=self.device)
-
         if self.policy_path:
-            self.policy = torch.jit.load(self.policy_path, map_location=self.device)
+            policy_path_str = str(self.policy_path)
+            try:
+                print(f"[INFO] 尝试作为 TorchScript JIT 模型加载: {policy_path_str}")
+                self.policy = torch.jit.load(policy_path_str, map_location=self.device)
+            except RuntimeError as e:
+                print(f"[WARNING] torch.jit.load 失败。诊断信息: {e}")
+                
+                # 检查是否是 Git LFS 指针文件
+                file_size = os.path.getsize(policy_path_str)
+                if file_size < 2000:
+                    raise RuntimeError(f"严重错误: {policy_path_str} 的文件大小只有 {file_size} 字节！"
+                                       "这极可能是一个 Git LFS 文本指针文件。请在代码库根目录运行 `git lfs pull` 来拉取真实权重。")
+                
+                print("[INFO] 尝试作为普通 PyTorch 文件加载以诊断内容...")
+                loaded_obj = torch.load(policy_path_str, map_location=self.device)
+                
+                if isinstance(loaded_obj, dict):
+                    raise ValueError(f"加载失败: {policy_path_str} 实际上是一个 state_dict (纯权重字典)，而不是 JIT 模型。\n"
+                                     "对于 RobotBridge 部署框架，策略文件必须是通过 torch.jit.trace 导出的完整模型。")
+                elif isinstance(loaded_obj, torch.nn.Module):
+                    self.policy = loaded_obj
+                    print("[INFO] 成功作为普通 PyTorch 模型加载。")
+                else:
+                    raise ValueError(f"未知模型内容，类型为: {type(loaded_obj)}")
 
         self.action_scale = float(self.policy_cfg.get("action_scale", ACTION_SCALE))
         self.action_clip = self.policy_cfg.get("action_clip", None)
