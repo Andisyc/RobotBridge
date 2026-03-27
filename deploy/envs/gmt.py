@@ -241,8 +241,29 @@ class GMTEnv(BaseEnv):
         #     self.policy = torch.jit.load(self.policy_path, map_location=self.device)
         # === 魔改结束 ===
         
-        if self.policy_path:
+        if str(self.policy_path).endswith('.onnx'):
+            import onnxruntime as ort
+            class ONNXPolicy:
+                def __init__(self, path, device):
+                    # 加载 ONNX 运行时
+                    self.session = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+                    self.input_name = self.session.get_inputs()[0].name
+                    self.device = device
+                    
+                def __call__(self, obs_tensor):
+                    # 拦截输入：转 numpy -> ONNX 推理 -> 转回 tensor
+                    obs_np = obs_tensor.detach().cpu().numpy()
+                    action_np = self.session.run(None, {self.input_name: obs_np})[0]
+                    return torch.tensor(action_np, dtype=torch.float32, device=self.device)
+            
+            self.policy = ONNXPolicy(self.policy_path, self.device)
+            print(f"\n[INFO] 成功挂载 ONNX Runtime 推理引擎: {self.policy_path}\n")
+        else:
+            # 保留原有的 JIT 加载逻辑
             self.policy = torch.jit.load(self.policy_path, map_location=self.device)
+
+        # if self.policy_path:
+        #     self.policy = torch.jit.load(self.policy_path, map_location=self.device)
 
         self.action_scale = float(self.policy_cfg.get("action_scale", ACTION_SCALE))
         self.action_clip = self.policy_cfg.get("action_clip", None)
