@@ -40,6 +40,20 @@ class GMTAgent(BaseAgent):
                 # 把结果包回 tensor，为了完美衔接原代码第 29 行的返回逻辑
                 action_tensor = torch.tensor(action_np, device=self.device)
             else:
+
+                # --- 插入调试代码开始 ---
+                print("\n" + "="*40)
+                print(f"[DEBUG] 总观测 Tensor 形状: {obs_tensor.shape}")
+                if isinstance(obs_buf_dict, dict):
+                    for key, val in obs_buf_dict.items():
+                        if hasattr(val, 'shape'):
+                            print(f"  - {key}: {val.shape}")
+                print("="*40 + "\n")
+                # --- 插入调试代码结束 ---
+
+                action_tensor = self.policy(obs_tensor) # 这是第 44 行报错的地方
+                # ...
+
                 # === 原版 PyTorch 推理模式 ===
                 action_tensor = self.policy(obs_tensor)
 
