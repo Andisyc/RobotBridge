@@ -99,5 +99,3 @@ class GMTAgent(BaseAgent):
 
             if self.env.motion_loader.cur_motion_end:
                 obs_buf_dict = self.env.next_motion()
-
-        

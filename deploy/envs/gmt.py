@@ -280,10 +280,7 @@ class GMTEnv(BaseEnv):
         self.motion_loader.cur_motion_end = False
         self.last_action.fill(0)
 
-        print(f"\n history_len={self.history_len} \n")
-
-        # temp = 1
-        # assert temp == 2
+        print(f"\n history_len_len={self.history_len} \n")
 
         self.history_len = 0
 
@@ -294,6 +291,11 @@ class GMTEnv(BaseEnv):
             )
         else:
             self.proprio_history = deque([], maxlen=0)
+
+        print("do we running self.compute_observation() ?")
+
+        temp = 1
+        assert temp == 2
 
         obs = self.compute_observation()
         self.obs_buf_dict = {"obs": obs}
@@ -352,6 +354,8 @@ class GMTEnv(BaseEnv):
 
         # 总观测量 = 参考动作 + 本体感知 + 历史观测
         full_obs = np.concatenate([mimic_obs, obs_prop, obs_hist])
+
+        print(f"\n full_obs: {full_obs.shape}, mimic_obs: {mimic_obs.shape}, obs_prop: {obs_prop.shape}, obs_hist: {obs_hist.shape}\n")
 
         self.proprio_history.append(obs_prop)
         # self.motion_loader._update_metrics()
