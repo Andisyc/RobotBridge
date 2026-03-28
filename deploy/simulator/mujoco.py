@@ -48,7 +48,8 @@ class Mujoco(BaseSim):
 
     def _setup(self):
         super()._setup()
-        self.lc = lcm.LCM('udpm://239.255.76.67:7667?ttl=255')
+        # self.lc = lcm.LCM('udpm://239.255.76.67:7667?ttl=255')
+        self.lc = lcm.LCM('udpm://239.255.76.67:7777?ttl=255')
 
     def _load_asset(self):
         super()._load_asset()

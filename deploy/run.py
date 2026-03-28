@@ -26,20 +26,7 @@ def main(cfg: DictConfig) -> None:
     logger.add(sys.stdout, level=console_log_level, colorize=True)
     logger.info(f'Log saved to {hydra_log_path}')
 
-    print(f"\n config: {cfg.keys()} \n")
-
-    print(f"\n config: {cfg.get('obs')} \n")
-
-    print(f"\n b4 instantiate agent {cfg.agent} \n")
-
     agent = instantiate(cfg.agent)
-
-    if hasattr(agent, "load_onnx_policy"):
-        print(f"\n agent do has load_onnx_policy \n")
-
-    # temp = 1
-    # assert temp == 2
-
     agent.run()
 
 

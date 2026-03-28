@@ -25,8 +25,7 @@ robot:
   ]
 
 motion:
-  # motion_path: ./data/motion/lafan_npz_10s_wo_getup
-  motion_path: ./data/motion/lafan_g1_npz/g1__jumps1_subject1.npz
+  motion_path: ./data/motion/lafan_npz_10s_wo_getup
   playback_speed: 1.0
   loop: true
   total_dof: 29

@@ -118,24 +118,29 @@ class GMTMotionDataset(MotionDataset):
         self.motion_root_index = 0
 
     def get_mimic_obs(self, control_dt: float) -> np.ndarray:
+        # 未来帧索引
         future_indices = np.clip(
-            self.timestep + self.tar_obs_steps,
+            self.timestep + self.tar_obs_steps, # 当前帧 + 未来帧
             0,
-            self.motion.time_step_total - 1,
+            self.motion.time_step_total - 1, # 防止越界
         )
 
+        # 从数据集中提取世界坐标系下根节点物理量
         ref_pos_w = self.motion.body_pos_w[future_indices, self.motion_root_index]
         ref_quat_w = self.motion.body_quat_w[future_indices, self.motion_root_index]
         ref_vel_w = self.motion.body_lin_vel_w[future_indices, self.motion_root_index]
         ref_ang_vel_w = self.motion.body_ang_vel_w[future_indices, self.motion_root_index]
         ref_dof_pos = self.motion.joint_pos[future_indices]
 
+        # 空间对齐: 将Ref的X、Y、Yaw平移旋转到起始坐标系
         aligned_pos = self.motion_init_align.align_pos_batch(ref_pos_w)
         aligned_quat_xyzw = self.motion_init_align.align_quat_batch(ref_quat_w[:, [1, 2, 3, 0]])
 
+        # 提取姿态角: Roll, Pitch
         aligned_quat_torch = torch.from_numpy(aligned_quat_xyzw).to(self.device)
         roll, pitch, _ = euler_from_quat_gmt(aligned_quat_torch)
 
+        # 速度转换: 从世界坐标系转换至相对根节点的局部坐标系
         local_vel = quat_rotate_inverse(
             aligned_quat_torch,
             torch.from_numpy(ref_vel_w).to(self.device),
@@ -147,18 +152,33 @@ class GMTMotionDataset(MotionDataset):
             w_last=True,
         )
 
+        print(f"\n self.tar_obs_steps={self.tar_obs_steps} \n")
+
+        print(f"\n get_mimic_obs: \n")
+        print(f"\n aligned_pos[:, 2:3]={aligned_pos[:, 2:3].shape} \n")
+        print(f"\n roll.unsqueeze(-1)={roll.unsqueeze(-1).shape} \n")
+        print(f"\n pitch.unsqueeze(-1)={pitch.unsqueeze(-1).shape} \n")
+        print(f"\n local_vel={local_vel.shape} \n")
+        print(f"\n local_ang_vel[:, 2:3]={local_ang_vel[:, 2:3].shape} \n")
+        print(f"\n ref_dof_pos={ref_dof_pos.shape} \n")
+
+        # temp = 1
+        # assert temp == 2
+
+        # 拼接观测量
         mimic_obs = torch.cat(
             (
-                torch.from_numpy(aligned_pos[:, 2:3]).to(self.device),
-                roll.unsqueeze(-1),
-                pitch.unsqueeze(-1),
-                local_vel,
-                local_ang_vel[:, 2:3],
-                torch.from_numpy(ref_dof_pos).to(self.device),
+                torch.from_numpy(aligned_pos[:, 2:3]).to(self.device), # 对齐位置 1 dim (只取Yaw -- Z轴)
+                roll.unsqueeze(-1), # 相对姿态 Roll 1 dim
+                pitch.unsqueeze(-1), # 相对姿态 Pitch 1 dim
+                local_vel, # 局部坐标系线速度 3 dim
+                local_ang_vel[:, 2:3], # 局部坐标系角速度 1 dim (只取Yaw -- Z轴)
+                torch.from_numpy(ref_dof_pos).to(self.device), # 关节角 29 dim
             ),
             dim=-1,
         )
 
+        # 平展张量并返回
         return mimic_obs.view(-1).cpu().numpy()
 
 
@@ -280,22 +300,16 @@ class GMTEnv(BaseEnv):
         self.motion_loader.cur_motion_end = False
         self.last_action.fill(0)
 
-        print(f"\n history_len_len={self.history_len} \n")
+        print(f"\n history_len={self.history_len} \n")
 
         self.history_len = 0
 
         if self.history_len > 0:
             self.proprio_history = deque(
                 [np.zeros(self.n_proprio, dtype=np.float32) for _ in range(self.history_len)],
-                maxlen=self.history_len,
-            )
+                maxlen=self.history_len,)
         else:
             self.proprio_history = deque([], maxlen=0)
-
-        print("do we running self.compute_observation() ?")
-
-        temp = 1
-        assert temp == 2
 
         obs = self.compute_observation()
         self.obs_buf_dict = {"obs": obs}
@@ -355,10 +369,14 @@ class GMTEnv(BaseEnv):
         # 总观测量 = 参考动作 + 本体感知 + 历史观测
         full_obs = np.concatenate([mimic_obs, obs_prop, obs_hist])
 
+        # 812, 720, 92
         print(f"\n full_obs: {full_obs.shape}, mimic_obs: {mimic_obs.shape}, obs_prop: {obs_prop.shape}, obs_hist: {obs_hist.shape}\n")
 
         self.proprio_history.append(obs_prop)
         # self.motion_loader._update_metrics()
+
+        # temp = 1
+        # assert temp == 2
 
         if getattr(self.simulator, "marker", False):
             markers_world = self._get_reference_markers_world()

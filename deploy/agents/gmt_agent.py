@@ -18,12 +18,6 @@ class GMTAgent(BaseAgent):
 
     def _inference(self, obs_buf_dict):
         obs_numpy = obs_buf_dict['obs'] 
-
-        # print(f"\n obs_buf_dict: {obs_buf_dict['obs']} \n")
-
-        # temp = 1
-        # assert temp == 2
-
         obs_tensor = torch.from_numpy(obs_numpy).float().to(self.device)
         
         if len(obs_tensor.shape) == 1:
