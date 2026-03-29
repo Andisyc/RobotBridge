@@ -139,7 +139,12 @@ def _parse_str_list(value: Optional[str]) -> List[str]:
 def _parse_float_array(value: Optional[str]) -> np.ndarray:
     if value is None or value.strip() == "":
         return np.zeros(0, dtype=np.float32)
-    return np.asarray([float(item) for item in value.split(",") if item.strip()], dtype=np.float32)
+
+    # 过滤掉可能存在的方括号，然后再按逗号分割
+    clean_value = value.replace("[", "").replace("]", "")
+
+    return np.asarray([float(item) for item in clean_value.split(",") if item.strip()], dtype=np.float32)
+    # return np.asarray([float(item) for item in value.split(",") if item.strip()], dtype=np.float32)
 
 @dataclass()
 class MosaicModelMeta:

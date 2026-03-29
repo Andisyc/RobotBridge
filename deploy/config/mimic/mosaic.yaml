@@ -1,5 +1,5 @@
 policy:
-  checkpoint: ./data/model/gmt.onnx # ADAPT/ADAPTOR_one_stage24K_multi_distill_with_noitom_30min_GLOBAL_1K.onnx
+  checkpoint: ./data/model/model_27000.onnx
   without_state_estimator: true
   action_beta: 1.0
   max_timestep: -1
