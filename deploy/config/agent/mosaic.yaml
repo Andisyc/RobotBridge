@@ -4,4 +4,3 @@ env: ${env}
 config:
   checkpoint: ${mimic.policy.checkpoint}
   device: ${device}
-

@@ -9,9 +9,9 @@ policy:
   save_video: false
 
 motion:
-  motion_path: ./data/motion/dance1_subject1.npz
+  motion_path: ./data/motion/amass_g1_0017_circle_walk_poses.npz
   playback_speed: 1.0
-  loop: false
+  loop: True
   override_robot_anchor_pos: false
   interp_steps: 5
   anchor_body_name: "torso_link"

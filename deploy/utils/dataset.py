@@ -100,10 +100,10 @@ class MotionLoader:
             # import sys
             # sys.exit(0) # 退出程序
 
-            # === 魔改开始：屏蔽强制退出，强制将索引归零 ===
+            # === reset idx to 0 ===
             print("[HACK] Motion finished! Looping back to the start...")
             self.current_file_idx = 0 
-            # === 魔改结束 ===
+            # === reset idx to 0 ===
         
         self._load_motion_file(self.file_list[self.current_file_idx])
         return True
@@ -124,7 +124,6 @@ class MotionLoader:
     @property
     def body_ang_vel_w(self) -> np.ndarray:
         return self._body_ang_vel_w[:, self._body_indexes]
-    
 
 
 class MosaicMetaParsingError(RuntimeError):
@@ -493,6 +492,21 @@ class MotionDataset:
         return self.motion_init_align.align_quat_batch(body_quat_raw)
 
     def post_step_callback(self):
+        # ============== examine motion static ==============
+        # logger.info(f"[MotionDataset] Advancing timestep. Current: {self.timestep}")
+        # if self.timestep + 1 < self.motion.time_step_total:
+        #     # Log the x-coordinate of the first body for current and next timestep
+        #     try:
+        #         current_pos_x = self.motion.body_pos_w[self.timestep][0][0]
+        #         next_pos_x = self.motion.body_pos_w[self.timestep + 1][0][0]
+        #         if abs(current_pos_x - next_pos_x) < 1e-6:
+        #             logger.warning(f"  - Motion data may be static. Pos X at step {self.timestep} and {self.timestep+1} are identical: {current_pos_x:.4f}")
+        #         else:
+        #             logger.debug(f"  - Motion data is dynamic. Pos X at step {self.timestep}: {current_pos_x:.4f}, next: {next_pos_x:.4f}")
+        #     except IndexError:
+        #         pass  # Ignore potential index errors at the edge
+        # ============== examine motion static ==============
+
         self.timestep += 1
         self.cur_motion_end = (self.timestep == self.motion.time_step_total)
         self.timestep = np.clip(self.timestep, 0, self.motion.time_step_total - 1)

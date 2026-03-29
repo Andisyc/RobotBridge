@@ -319,7 +319,7 @@ class MosaicEnv(BaseEnv):
     #         yaw = float(sRot.from_quat(robot_anchor_quat_w).as_euler("xyz", degrees=False)[2])
     #     except Exception:
     #         yaw = 0.0
-            
+    
     #     yaw_rot = sRot.from_euler("z", yaw, degrees=False)
     #     markers_world = yaw_rot.apply(body_rel) + robot_anchor_pos_w.reshape(1, 3)
     #     return markers_world.astype(np.float32)
@@ -338,6 +338,7 @@ class MosaicEnv(BaseEnv):
         if body_pos_aligned.size == 0:
             return None
 
+        logger.debug(f"[MosaicEnv] Marker mean pos: {np.mean(body_pos_aligned):.4f}")
         return body_pos_aligned.astype(np.float32)
     
     def compute_observation(self):
@@ -347,13 +348,13 @@ class MosaicEnv(BaseEnv):
             command, robot_anchor_pos_w, robot_anchor_quat_w, anchor_pos_w, anchor_quat_w = self._get_command_teleop()
         else:
             command, robot_anchor_pos_w, robot_anchor_quat_w, anchor_pos_w, anchor_quat_w = self._get_command()
-            
+        
         pos, ori = subtract_frame_transforms(
             np.asarray(robot_anchor_pos_w, dtype=np.float32),
             np.asarray(robot_anchor_quat_w, dtype=np.float32),
             np.asarray(anchor_pos_w, dtype=np.float32),
-            np.asarray(anchor_quat_w, dtype=np.float32),
-        )
+            np.asarray(anchor_quat_w, dtype=np.float32),)
+        
         if self.eval_mode:
             self.motion_loader._update_metrics()
 
