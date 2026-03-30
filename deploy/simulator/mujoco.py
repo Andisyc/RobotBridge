@@ -198,24 +198,52 @@ class Mujoco(BaseSim):
             self.sim_start_time = self.mujoco_data.time
 
         self.act = action.copy()
+
+        # 从配置中读取 'is_mosaic' 标志，如果未定义则默认为 False
+        # 这个标志决定了是使用复杂的 MoSAIC Agent 还是基础的 Agent
         is_mosaic = getattr(self.cfg.control, 'is_mosaic', False)
         
-        # 2. compute target pos
+        # 2. compute target pos (计算目标关节角度)
+        # ------------------- 核心逻辑分支 -------------------
         if is_mosaic:
+            # MoSAIC 模式:
+            # 在这种模式下，策略网络(policy)的输出 'action' 直接被当作最终的目标关节角度 (target DoF position)。
+            # MoSAIC Agent 内部结构更复杂，它自己完成了所有计算。
             tgt_dof_pos = action
         else:
+            # 非 MoSAIC 模式 (适用于标准或残差网络):
+            # 在这种模式下，策略网络的输出 'action' 是一个增量/残差值。
+
+            # a. 确定基础姿态 (base pose)
+            # 首先，获取机器人激活关节的默认站立姿态
             current_default_angles = self.default_angles[self.active_dof_idx].copy()
+
+            # 从配置中读取 'use_residual' 标志
             use_residual = getattr(self.cfg.control, 'use_residual', False)
+
             if use_residual and self.ref_dof_pos is not None:
+                # 如果 'use_residual' 为 True，说明要使用残差控制模式
+                # 此时，基础姿态不再是默认站立姿态，而是参考动作序列在当前帧的姿态
                 if hasattr(self.cfg.control, 'residual_joint_indices') and self.cfg.control.residual_joint_indices is not None:
+                    # 遍历配置文件中指定的关节索引
                     for idx in self.cfg.control.residual_joint_indices:
+                        # 将基础姿态的对应关节角度更新为参考动作的关节角度
                         current_default_angles[idx] = self.ref_dof_pos[idx]
+            
+            # 如果 'use_residual' 为 False，上面的 if 块不执行，'current_default_angles' 将保持为默认站立姿态。
+
+            # b. 计算最终目标姿态
             self.dof_tracking_init_pos = current_default_angles
+            
+            # 最终的目标关节角度 = 基础姿态 + 策略网络输出的残差 * 动作缩放因子
             tgt_dof_pos = current_default_angles + action * self.cfg.control.action_scale
 
-        # 3. physical stepping
+        # 3. physical stepping (物理引擎步进)
+        # 获取关节力矩限制
         torque_limit = np.array(self.cfg.control.torque_clip_value, dtype=np.float32)
         
+        # 'decimation' 指的是在一个策略网络决策周期内，物理引擎需要步进的次数。
+        # 例如，策略网络50Hz决策一次，物理引擎1000Hz运行，则 decimation 为 20。
         for _ in range(self.decimation):
             while self.paused:
                 if not self.viewer.is_running():
@@ -223,13 +251,21 @@ class Mujoco(BaseSim):
                 self.render()      # Keep rendering the screen, otherwise the window will freeze
                 time.sleep(0.01)
 
+            # 获取当前所有关节的角度和速度
             all_dof_pos = self.mujoco_data.qpos[7:].astype(np.float32)
             all_dof_vel = self.mujoco_data.qvel[6:].astype(np.float32)
 
+            # ------------------- PD 控制器 -------------------
+            # 这里是底层控制器，策略网络并不直接输出力矩，而是输出高层的目标角度 'tgt_dof_pos'。
+            # PD控制器根据目标角度和当前角度的误差，以及当前速度，计算出需要施加的力矩。
+            # torque = Kp * (target_pos - current_pos) - Kd * current_vel
             torque_active = (tgt_dof_pos - all_dof_pos[self.active_dof_idx]) * self.kps[self.active_dof_idx] \
                             - all_dof_vel[self.active_dof_idx] * self.kds[self.active_dof_idx]
+            
+            # 对计算出的力矩进行限幅，防止损坏电机
             torque_active = np.clip(torque_active, -torque_limit, torque_limit)
 
+            # 将计算出的力矩应用到模拟器中
             if len(self.frozen_dof_idx) > 0:
                 torque_all = np.zeros(self.num_dof, dtype=np.float32)
                 torque_all[self.active_dof_idx] = torque_active
@@ -240,13 +276,14 @@ class Mujoco(BaseSim):
             else:
                 self.mujoco_data.ctrl[:] = torque_active
 
+            # 执行一步物理仿真
             mujoco.mj_step(self.mujoco_model, self.mujoco_data)
 
-        # 4. rendering
+        # 4. rendering (渲染)
         if self.cfg.control.viewer:
             self.render()
 
-        # 5. (Optional) sync with real time
+        # 5. (Optional) sync with real time (与真实时间同步)
         is_real_time = getattr(self.cfg.control, 'real_time', False)
         if is_real_time:
             sim_elapsed = self.mujoco_data.time - self.sim_start_time
@@ -259,28 +296,34 @@ class Mujoco(BaseSim):
                     time.sleep(time_to_wait)
 
     def calibrate(self, refresh, init_ref_dof_pos=None):
+        # 这个函数用于在仿真开始时重置机器人的姿态
         if refresh:
             default_qpos = self.default_qpos.copy()
             default_qvel = self.default_qvel
 
-            # Use init_ref_dof_pos if provided, otherwise use default_angles
-            # Important: default_qpos[7:] needs ALL joint angles (num_dof), not just active ones (num_action)
+            # 如果提供了初始参考姿态 (init_ref_dof_pos)，则使用它来设置机器人的起始姿态。
+            # 这通常是参考动作序列的第一帧。
             if init_ref_dof_pos is not None:
-                # Start with all default angles
+                # 同样，先从默认站立姿态开始
                 current_default_angles = self.default_angles.copy()
+                
+                # 检查是否使用残差模式
                 use_residual = getattr(self.cfg.control, 'use_residual', False)    
                 if use_residual and init_ref_dof_pos is not None:
-                    # Get residual joint indices from config
+                    # 如果是残差模式，起始姿态就应该是参考动作的起始姿态，而不是默认站立姿态。
                     if hasattr(self.cfg.control, 'residual_joint_indices') and self.cfg.control.residual_joint_indices is not None:
                         residual_joint_indices = self.cfg.control.residual_joint_indices
-                        # Flatten init_ref_dof_pos if it's 2D
+                        # 如果 init_ref_dof_pos 是二维的，将其展平
                         ref_dof_pos_flat = init_ref_dof_pos.flatten() if init_ref_dof_pos.ndim > 1 else init_ref_dof_pos
+                        # 将指定的关节角度设置为参考动作的初始角度
                         for idx in residual_joint_indices:
                             if idx < len(ref_dof_pos_flat) and idx < len(current_default_angles):
                                 current_default_angles[idx] = ref_dof_pos_flat[idx]
+                
+                # 将计算出的起始姿态赋值给模拟器
                 default_qpos[7:] = current_default_angles
             else:
-                # Use complete default_angles for all joints
+                # 如果没有提供初始参考姿态，则直接使用默认站立姿态
                 default_qpos[7:] = self.default_angles
 
             logger.info(f"Resetting envs with ref_dof_pos={[f'{x:.3f}' for x in default_qpos[7:].tolist()]}")
