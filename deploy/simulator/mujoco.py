@@ -206,13 +206,14 @@ class Mujoco(BaseSim):
         # 2. compute target pos (计算目标关节角度)
         # ------------------- 核心逻辑分支 -------------------
         if is_mosaic:
-            # MoSAIC 模式:
-            # 在这种模式下，策略网络(policy)的输出 'action' 直接被当作最终的目标关节角度 (target DoF position)。
-            # MoSAIC Agent 内部结构更复杂，它自己完成了所有计算。
+            # MOSAIC模式:
+            # policy输出action直接被当作最终的目标关节角度 (target DoF position)
+            # MOSAIC Agent内部结构更复杂，它自己完成了所有计算
             tgt_dof_pos = action
         else:
-            # 非 MoSAIC 模式 (适用于标准或残差网络):
-            # 在这种模式下，策略网络的输出 'action' 是一个增量/残差值。
+            # 作为基线 (Ref+RES) 用于对比GMT+RES
+            # 非MOSAIC模式 (适用于标准或残差网络):
+            # Ref+RES输出的action是一个增量/残差值
 
             # a. 确定基础姿态 (base pose)
             # 首先，获取机器人激活关节的默认站立姿态
