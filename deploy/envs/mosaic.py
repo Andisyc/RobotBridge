@@ -11,6 +11,7 @@ from utils.dof import DoFAdapter
 from utils.transformation import matrix_from_quat, subtract_frame_transforms, quat_rotate_inverse
 
 from utils.data_pub import DataPublisher
+from utils.video_recorder import MuJoCoVideoRecorder
 
 import collections
 
@@ -28,10 +29,12 @@ class MosaicEnv(BaseEnv):
         super().__init__(config)
 
         cfg_dict = OmegaConf.to_container(config, resolve=True) if isinstance(config, DictConfig) else config
+        project_root = str(Path(__file__).resolve().parents[1])
         self.policy_cfg: Dict[str, Union[float, bool]] = cfg_dict.get("policy", {}) if isinstance(cfg_dict, dict) else {}
         self.motion_cfg: Dict[str, Union[float, bool, str]] = (
             cfg_dict.get("motion", {}) if isinstance(cfg_dict, dict) else {}
         )
+        self.video_recorder = MuJoCoVideoRecorder(cfg_dict.get("record_video", {}) or {}, self.simulator, project_root)
 
         self.motion_loader = MotionDataset(self.motion_cfg, self.simulator)
 
@@ -184,6 +187,11 @@ class MosaicEnv(BaseEnv):
 
         if self.policy_cfg.get("save_video", False):
             self.check_save_video()
+        if self.video_recorder.enabled:
+            source_name = getattr(getattr(self.motion_loader, "motion", None), "motion_file", None) or getattr(getattr(self.motion_loader, "motion", None), "current_file", None)
+            self.video_recorder.start_sequence(source_name)
+            if self.video_recorder.record_initial_frame:
+                self.video_recorder.capture()
 
         return self.obs_buf_dict
 
@@ -204,7 +212,10 @@ class MosaicEnv(BaseEnv):
         if self.policy_cfg.get("save_video", False):
             self.sample_video_frame()
 
-        return super().step(sim_action[None, ...])
+        obs_buf_dict = super().step(sim_action[None, ...])
+        if self.video_recorder.enabled:
+            self.video_recorder.capture()
+        return obs_buf_dict
 
     def _get_command(self):
         command_data = self.motion_loader.get_data()
@@ -463,12 +474,16 @@ class MosaicEnv(BaseEnv):
 
     def next_motion(self, fail: bool = False):
         self.check_save_video()
+        if self.video_recorder.enabled:
+            self.video_recorder.save(self.motion_loader, complete=not fail, reason="manual_next_motion")
         self.motion_loader.next_motion(fail)
         return self.reset()
     
     def _check_termination(self):
         self.hard_reset = self.simulator.check_termination()
         if self.hard_reset:
+            if self.video_recorder.enabled:
+                self.video_recorder.save(self.motion_loader, complete=False, reason="termination")
             if self.eval_mode:
                 self.next_motion(fail=True)
             self._save_collected_traj(False)
