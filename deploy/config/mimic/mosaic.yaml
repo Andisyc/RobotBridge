@@ -9,8 +9,8 @@ policy:
   save_video: false
 
 motion:
-  motion_path: ./data/motion/Walking/'amass_g1_jump-06-rope normal run fast-kudo_poses.npz'
-  
+  motion_path: ./data/motion/Walking/amass_g1_jump-06-rope normal run fast-kudo_poses.npz
+
   # Walking
   # 'amass_g1_jump-06-rope normal run fast-kudo_poses.npz'
   # 'amass_g1_jump-05-rope normal run-kudo_poses.npz'
