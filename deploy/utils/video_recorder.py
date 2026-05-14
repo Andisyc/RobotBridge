@@ -41,6 +41,7 @@ class MuJoCoVideoRecorder:
         self.render_every = int(_cfg_get(self.cfg, "render_every", 0) or 0)
         self.record_initial_frame = bool(_cfg_get(self.cfg, "record_initial_frame", True))
         self.include_incomplete = bool(_cfg_get(self.cfg, "include_incomplete", True))
+        self.exit_on_complete = bool(_cfg_get(self.cfg, "exit_on_complete", False))
         self.track_body_name = _cfg_get(self.cfg, "track_body_name", "torso_link")
         self.distance = float(_cfg_get(self.cfg, "distance", 3.0))
         self.azimuth = float(_cfg_get(self.cfg, "azimuth", 180.0))
