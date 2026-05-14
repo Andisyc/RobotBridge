@@ -20,6 +20,8 @@ if project_root not in sys.path:
 from envs.base_env import BaseEnv
 from utils.dataset import MotionDataset
 from utils.motion_lib.rotations import quat_rotate_inverse
+from utils.motion_recorder import MotionSequenceRecorder
+from utils.video_recorder import MuJoCoVideoRecorder
 
 ANKLE_IDX = [4, 5, 10, 11]
 ACTION_SCALE = 0.5
@@ -193,6 +195,8 @@ class GMTEnv(BaseEnv):
         self.policy_cfg = cfg_dict.get("policy", {}) or {}
         self.motion_cfg = cfg_dict.get("motion", {}) or {}
         self.robot_cfg = cfg_dict.get("robot", {}) or {}
+        self.motion_recorder = MotionSequenceRecorder(cfg_dict.get("record_motion", {}) or {}, self.simulator, project_root)
+        self.video_recorder = MuJoCoVideoRecorder(cfg_dict.get("record_video", {}) or {}, self.simulator, project_root)
 
         metrics_path = cfg_dict.get("metrics_path") or self.policy_cfg.get("metrics_path")
         if not metrics_path:
@@ -312,6 +316,15 @@ class GMTEnv(BaseEnv):
             self.proprio_history = deque([], maxlen=0)
 
         obs = self.compute_observation()
+        source_name = getattr(getattr(self.motion_loader, "motion", None), "motion_file", None) or getattr(getattr(self.motion_loader, "motion", None), "current_file", None)
+        if self.motion_recorder.enabled:
+            self.motion_recorder.start_sequence(source_name)
+            if self.motion_recorder.record_initial_frame:
+                self.motion_recorder.record(self.motion_loader)
+        if self.video_recorder.enabled:
+            self.video_recorder.start_sequence(source_name)
+            if self.video_recorder.record_initial_frame:
+                self.video_recorder.capture()
         self.obs_buf_dict = {"obs": obs}
 
         return self.obs_buf_dict
@@ -404,12 +417,21 @@ class GMTEnv(BaseEnv):
 
         # === 环境步进与状态更新 ===
         obs = self.compute_observation()
+        if self.motion_recorder.enabled:
+            self.motion_recorder.record(self.motion_loader)
+        if self.video_recorder.enabled:
+            self.video_recorder.capture()
         termination_obs = self._check_termination()
         if termination_obs is not None:
-            obs = termination_obs
+            self.obs_buf_dict = {"obs": termination_obs}
+            return self.obs_buf_dict
 
         self.motion_loader.post_step_callback()
         if self.motion_loader.cur_motion_end:
+            if self.motion_recorder.enabled:
+                self.motion_recorder.save(self.motion_loader, complete=True, reason="motion_end")
+            if self.video_recorder.enabled:
+                self.video_recorder.save(self.motion_loader, complete=True, reason="motion_end")
             self.motion_loader.next_motion(fail=False)
             return self.reset()
 
@@ -417,13 +439,22 @@ class GMTEnv(BaseEnv):
         return self.obs_buf_dict
 
     def _check_termination(self):
-        # hard_reset = self.simulator.check_termination()
-        # if hard_reset:
-        #     self.next_motion(fail=True)
-        #     self._reset_envs(True)
-        #     return self.compute_observation()
+        if not (self.motion_recorder.enabled or self.video_recorder.enabled):
+            return None
+        hard_reset = self.simulator.check_termination()
+        if hard_reset:
+            if self.motion_recorder.enabled:
+                self.motion_recorder.save(self.motion_loader, complete=False, reason="termination")
+            if self.video_recorder.enabled:
+                self.video_recorder.save(self.motion_loader, complete=False, reason="termination")
+            self.motion_loader.next_motion(fail=True)
+            return self.reset()["obs"]
         return None
 
     def next_motion(self, fail: bool = False):
+        if self.motion_recorder.enabled:
+            self.motion_recorder.save(self.motion_loader, complete=not fail, reason="manual_next_motion")
+        if self.video_recorder.enabled:
+            self.video_recorder.save(self.motion_loader, complete=not fail, reason="manual_next_motion")
         self.motion_loader.next_motion(fail)
         return self.reset()
