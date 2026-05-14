@@ -68,7 +68,16 @@ class MuJoCoVideoRecorder:
         return path
 
     def _init_renderer(self) -> None:
-        self.renderer = mujoco.Renderer(self.simulator.mujoco_model, height=self.height, width=self.width)
+        model = self.simulator.mujoco_model
+        # MuJoCo XMLs often default to a 640x480 offscreen framebuffer. The
+        # renderer refuses larger requested images unless the framebuffer is
+        # enlarged before context creation.
+        try:
+            model.vis.global_.offwidth = max(int(model.vis.global_.offwidth), self.width)
+            model.vis.global_.offheight = max(int(model.vis.global_.offheight), self.height)
+        except Exception as exc:
+            logger.warning(f"[VideoRecorder] Could not resize MuJoCo offscreen framebuffer: {exc}")
+        self.renderer = mujoco.Renderer(model, height=self.height, width=self.width)
         self.camera = mujoco.MjvCamera()
         mujoco.mjv_defaultCamera(self.camera)
         self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
