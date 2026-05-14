@@ -15,6 +15,7 @@ config:
     min_frames: 2
     record_initial_frame: True
     include_incomplete: True
+    exit_on_complete: False
     fps: null
   record_video:
     enabled: False
@@ -26,6 +27,7 @@ config:
     render_every: 0
     record_initial_frame: True
     include_incomplete: True
+    exit_on_complete: False
     min_frames: 2
     track_body_name: torso_link
     distance: 3.0

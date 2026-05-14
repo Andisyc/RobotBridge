@@ -92,19 +92,16 @@ class MotionLoader:
         self._body_ang_vel_w = data["body_ang_vel_w"][1:]
         self.time_step_total = self.joint_pos.shape[0]
 
-    def next_motion(self) -> bool:
-        """切换到下一个运动文件。如果结束则退出程序。"""
+    def next_motion(self, loop: bool = True) -> bool:
+        """Switch to the next motion. Return False when the list is exhausted."""
         self.current_file_idx += 1
         if self.current_file_idx >= len(self.file_list):
-            # print("All motion files processed")
-            # import sys
-            # sys.exit(0) # 退出程序
+            if not loop:
+                logger.info("All motion files processed.")
+                return False
+            print("[MotionLoader] Motion finished. Looping back to the start...")
+            self.current_file_idx = 0
 
-            # === reset idx to 0 ===
-            print("[HACK] Motion finished! Looping back to the start...")
-            self.current_file_idx = 0 
-            # === reset idx to 0 ===
-        
         self._load_motion_file(self.file_list[self.current_file_idx])
         return True
 
@@ -690,9 +687,13 @@ class MotionDataset:
 
     def next_motion(self, fail: bool = False):
         self._write_metrics_to_csv(fail)
-        self.motion.next_motion()
-        
+        loop = bool(self.motion_cfg.get("loop", True))
+        has_next = self.motion.next_motion(loop=loop)
+        if not has_next:
+            return False
+
         logger.success(f"Successfully switched to: {os.path.basename(self.motion.current_file)}")
+        return True
 
 """
 0: pelvis

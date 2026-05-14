@@ -17,6 +17,7 @@ import collections
 
 info_pub = DataPublisher()
 import os
+import sys
 from pathlib import Path
 
 import imageio
@@ -476,7 +477,12 @@ class MosaicEnv(BaseEnv):
         self.check_save_video()
         if self.video_recorder.enabled:
             self.video_recorder.save(self.motion_loader, complete=not fail, reason="manual_next_motion")
-        self.motion_loader.next_motion(fail)
+        has_next = self.motion_loader.next_motion(fail)
+        if not has_next:
+            if self.video_recorder.enabled and self.video_recorder.exit_on_complete:
+                logger.info("[VideoRecorder] All motions recorded. Exiting because exit_on_complete=True.")
+                sys.exit(0)
+            return self.reset()
         return self.reset()
     
     def _check_termination(self):
