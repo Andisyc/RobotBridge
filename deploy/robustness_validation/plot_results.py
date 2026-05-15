@@ -265,8 +265,9 @@ def plot_zmp_mechanism(
     multi_mode: bool = False,
 ) -> None:
     """
-    Mechanism figure: mean ZMP margin during settle phase vs ε.
-    ZMP is identical regardless of push velocity → averaged over push velocities.
+    Mechanism figure: minimum short-window margin after the push vs ε.
+    The post-push window prevents later low-margin dance/kick phases from
+    being misattributed to push recovery.
     """
     eps_vals  = meta["epsilon_values"]
     pvel_vals = meta["push_velocities"]
@@ -275,7 +276,7 @@ def plot_zmp_mechanism(
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
-    # Average ZMP over push velocities (settle ZMP is push-independent)
+    # Average post-push minimum margin over push velocities.
     mean_zmps, std_zmps = [], []
     for ei in range(n_eps):
         zm = [merged[ei][pi]["mean_zmp"] for pi in range(n_pvel)
@@ -307,20 +308,20 @@ def plot_zmp_mechanism(
                         mean_zmps + std_zmps,
                         color=color, alpha=0.18, label="±1 std (motions)")
         ax.plot(eps_vals, mean_zmps, color=color, linewidth=2.2, linestyle="-",
-                marker="s", markersize=7, label="Mean ZMP margin")
+                marker="s", markersize=7, label="Min post-push margin")
     else:
         ax.fill_between(eps_vals,
                         mean_zmps - std_zmps,
                         mean_zmps + std_zmps,
                         color=color, alpha=0.18, label="±1 std (trials)")
         ax.plot(eps_vals, mean_zmps, color=color, linewidth=2, linestyle="-",
-                marker="s", markersize=7, label="Mean ZMP margin")
+                marker="s", markersize=7, label="Min post-push margin")
 
     ax.axhline(0.0, color="red", linestyle="--", linewidth=1.0,
                label="Stability boundary")
     ax.set_xlabel("Reference frame noise RMS ε (m)")
-    ax.set_ylabel("Mean ZMP lateral margin (m)")
-    ax.set_title("Mechanism: ZMP Margin vs Reference Frame Noise")
+    ax.set_ylabel("Minimum post-push margin (m)")
+    ax.set_title("Mechanism: Post-Push Margin vs Reference Frame Noise")
     ax.legend(fontsize=8)
     ax.set_xlim(left=0)
 
@@ -566,7 +567,7 @@ def _pooled_zmp_by_eps(
             summary = _mode_summary(store, perturbation_mode)
             for pi in range(n_pvel):
                 cell = summary[ei][pi]
-                zmp = cell["mean_zmp_settle"]
+                zmp = cell["mean_min_zmp_after_push"]
                 n = int(cell["n_total"])
                 if n <= 0 or np.isnan(zmp):
                     continue
@@ -620,7 +621,7 @@ def plot_grouped_zmp_mechanism(
     output_dir: str,
     perturbation_mode: str = "composite",
 ) -> None:
-    """Fig2: mechanism view, all motion categories and overall ZMP margin."""
+    """Fig2: mechanism view, all motion categories and post-push minimum margin."""
     eps_vals = stores[0][1].meta["epsilon_values"]
     groups = _group_names(stores)
     colors = ["#1976D2", "#388E3C", "#F57C00", "#7B1FA2", "#212121"]
@@ -638,8 +639,8 @@ def plot_grouped_zmp_mechanism(
 
     ax.axhline(0.0, color="red", linestyle="--", linewidth=1.0, label="Stability boundary")
     ax.set_xlabel("Reference frame error amplitude ε")
-    ax.set_ylabel("Mean ZMP margin (m)")
-    ax.set_title("Fig2: ZMP Margin vs Reference-Frame Error")
+    ax.set_ylabel("Minimum post-push margin (m)")
+    ax.set_title("Fig2: Post-Push Margin vs Reference-Frame Error")
     ax.set_xlim(left=0)
     ax.legend(fontsize=8, framealpha=0.8)
     _save(fig, output_dir, "fig2_zmp_margin")
@@ -670,6 +671,14 @@ def _write_summary_all_csv(stores: list[tuple[str, ResultsStore]], path: str) ->
                         "pre_fall_rate": cell["pre_fall_rate"],
                         "mean_zmp_settle": cell["mean_zmp_settle"],
                         "std_zmp_settle": cell["std_zmp_settle"],
+                        "mean_min_zmp_after_push": cell["mean_min_zmp_after_push"],
+                        "std_min_zmp_after_push": cell["std_min_zmp_after_push"],
+                        "mean_zmp_after_push": cell["mean_zmp_after_push"],
+                        "std_zmp_after_push": cell["std_zmp_after_push"],
+                        "mean_margin_drop": cell["mean_margin_drop"],
+                        "std_margin_drop": cell["std_margin_drop"],
+                        "mean_push_phase": cell["mean_push_phase"],
+                        "std_push_phase": cell["std_push_phase"],
                     })
     if not rows:
         return

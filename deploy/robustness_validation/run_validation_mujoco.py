@@ -43,6 +43,8 @@ SETTLE_STEPS = 100
 OBSERVE_STEPS = 200
 PUSH_OFFSET_MIN = 0
 PUSH_OFFSET_MAX = 40
+RECOVERY_WINDOW_STEPS = 50
+PUSH_SAFETY_MARGIN_STEPS = 20
 OU_TAU = 0.5
 IID_RATIO = 0.25
 
@@ -330,25 +332,32 @@ def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, s
     rng = random.Random(seed)
     angle = rng.uniform(0.0, 2.0 * math.pi)
     push_dir = np.array([math.cos(angle), math.sin(angle), 0.0], dtype=np.float32)
-    push_offset = rng.randint(args.push_offset_min, args.push_offset_max)
+    max_offset_by_window = args.observe_steps - args.recovery_window_steps - args.push_safety_margin_steps
+    push_offset_max = min(args.push_offset_max, max(args.push_offset_min, max_offset_by_window))
+    push_offset = rng.randint(args.push_offset_min, push_offset_max)
     push_step_abs = args.settle_steps + push_offset
 
     settle_margins: list[float] = []
     post_margins: list[float] = []
     fallen_before_push = False
     success = True
+    last_margin: float | None = None
+    pre_push_margin: float | None = None
+    post_window_end = push_step_abs + args.recovery_window_steps
 
     total_steps = args.settle_steps + args.observe_steps
     for step in range(total_steps):
         if step == push_step_abs:
+            pre_push_margin = last_margin if last_margin is not None else _upright_margin(env)
             _apply_root_velocity_push(env, push_dir, push_velocity)
 
         obs = _run_policy_step(agent, obs)
         margin = _upright_margin(env)
-        if step < args.settle_steps:
+        if step < push_step_abs:
             settle_margins.append(margin)
-        else:
+        elif step < post_window_end:
             post_margins.append(margin)
+        last_margin = margin
 
         if getattr(env, "validation_terminated", False):
             success = False
@@ -367,6 +376,18 @@ def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, s
         zmp_margins_settle=settle_margins,
         zmp_margins_post=post_margins,
         push_dir=push_dir.tolist(),
+        push_step_abs=int(push_step_abs),
+        push_phase=float(push_step_abs / max(total_steps, 1)),
+        pre_push_margin=(
+            float(pre_push_margin)
+            if pre_push_margin is not None else (float(settle_margins[-1]) if settle_margins else None)
+        ),
+        min_zmp_after_push=float(np.min(post_margins)) if post_margins else None,
+        mean_zmp_after_push=float(np.mean(post_margins)) if post_margins else None,
+        margin_drop=(
+            float((pre_push_margin if pre_push_margin is not None else settle_margins[-1]) - np.min(post_margins))
+            if post_margins and (pre_push_margin is not None or settle_margins) else None
+        ),
     )
 
 
@@ -389,6 +410,10 @@ def main() -> int:
     parser.add_argument("--observe_steps", type=int, default=OBSERVE_STEPS)
     parser.add_argument("--push_offset_min", type=int, default=PUSH_OFFSET_MIN)
     parser.add_argument("--push_offset_max", type=int, default=PUSH_OFFSET_MAX)
+    parser.add_argument("--recovery_window_steps", type=int, default=RECOVERY_WINDOW_STEPS,
+                        help="Only this many steps after the push contribute to post-push min-margin metrics.")
+    parser.add_argument("--push_safety_margin_steps", type=int, default=PUSH_SAFETY_MARGIN_STEPS,
+                        help="Keep pushes at least this many steps away from the observation horizon.")
     parser.add_argument("--ou_tau", type=float, default=OU_TAU)
     parser.add_argument("--iid_ratio", type=float, default=IID_RATIO)
     parser.add_argument("--seed", type=int, default=42)
@@ -417,6 +442,8 @@ def main() -> int:
         "observe_steps": args.observe_steps,
         "ou_tau": args.ou_tau,
         "iid_ratio": args.iid_ratio,
+        "recovery_window_steps": args.recovery_window_steps,
+        "push_safety_margin_steps": args.push_safety_margin_steps,
         "created_at": _datetime.datetime.now().isoformat(timespec="seconds"),
     }
     store = ResultsStore(meta)

@@ -19,6 +19,12 @@ class TrialResult:
     zmp_margins_settle: list   # ZMP margin (m) recorded every step during settle phase
     zmp_margins_post: list     # ZMP margin (m) recorded every step after push
     push_dir: list             # (3,) push direction unit vector [dx, dy, 0]
+    push_step_abs: int | None = None
+    push_phase: float | None = None
+    pre_push_margin: float | None = None
+    min_zmp_after_push: float | None = None
+    mean_zmp_after_push: float | None = None
+    margin_drop: float | None = None
 
 
 # ── Result container ──────────────────────────────────────────────────────────
@@ -63,6 +69,8 @@ class ResultsStore:
         keys_list, success, fallen_before, T_push = [], [], [], []
         settle_lengths, post_lengths = [], []
         all_settle_zmp, all_post_zmp, all_push_dirs = [], [], []
+        push_step_abs, push_phase = [], []
+        pre_push_margin, min_zmp_after_push, mean_zmp_after_push, margin_drop = [], [], [], []
 
         for key, r in self._data.items():
             keys_list.append(list(key))
@@ -74,6 +82,16 @@ class ResultsStore:
             all_settle_zmp.extend(r.zmp_margins_settle)
             all_post_zmp.extend(r.zmp_margins_post)
             all_push_dirs.append(r.push_dir)
+            push_step_abs.append(-1 if r.push_step_abs is None else int(r.push_step_abs))
+            push_phase.append(np.nan if r.push_phase is None else float(r.push_phase))
+            pre_push_margin.append(np.nan if r.pre_push_margin is None else float(r.pre_push_margin))
+            min_zmp_after_push.append(
+                np.nan if r.min_zmp_after_push is None else float(r.min_zmp_after_push)
+            )
+            mean_zmp_after_push.append(
+                np.nan if r.mean_zmp_after_push is None else float(r.mean_zmp_after_push)
+            )
+            margin_drop.append(np.nan if r.margin_drop is None else float(r.margin_drop))
 
         np.savez_compressed(
             os.path.join(output_dir, "results_raw.npz"),
@@ -86,6 +104,12 @@ class ResultsStore:
             settle_zmp=np.array(all_settle_zmp, dtype=np.float32),
             post_zmp=np.array(all_post_zmp, dtype=np.float32),
             push_dirs=np.array(all_push_dirs, dtype=np.float32),  # (N, 3)
+            push_step_abs=np.array(push_step_abs, dtype=np.int32),
+            push_phase=np.array(push_phase, dtype=np.float32),
+            pre_push_margin=np.array(pre_push_margin, dtype=np.float32),
+            min_zmp_after_push=np.array(min_zmp_after_push, dtype=np.float32),
+            mean_zmp_after_push=np.array(mean_zmp_after_push, dtype=np.float32),
+            margin_drop=np.array(margin_drop, dtype=np.float32),
         )
         print(f"[ResultsStore] Saved {len(self._data)} trials to {output_dir}")
         self.save_summary_csv(output_dir)
@@ -107,17 +131,45 @@ class ResultsStore:
         settle = data["settle_zmp"]
         post   = data["post_zmp"]
         dirs   = data["push_dirs"]
+        push_step_abs_arr = data["push_step_abs"] if "push_step_abs" in data.files else None
+        push_phase_arr = data["push_phase"] if "push_phase" in data.files else None
+        pre_push_arr = data["pre_push_margin"] if "pre_push_margin" in data.files else None
+        min_post_arr = data["min_zmp_after_push"] if "min_zmp_after_push" in data.files else None
+        mean_post_arr = data["mean_zmp_after_push"] if "mean_zmp_after_push" in data.files else None
+        drop_arr = data["margin_drop"] if "margin_drop" in data.files else None
 
         settle_ptr, post_ptr = 0, 0
         for i, key in enumerate(keys):
             s_len = int(sl[i]);  p_len = int(pl[i])
+            settle_values = settle[settle_ptr:settle_ptr + s_len].tolist()
+            post_values = post[post_ptr:post_ptr + p_len].tolist()
+            fallback_pre = settle_values[-1] if settle_values else float("nan")
+            fallback_min_post = min(post_values) if post_values else float("nan")
+            fallback_mean_post = float(np.mean(post_values)) if post_values else float("nan")
+            fallback_drop = fallback_pre - fallback_min_post
+
+            def _optional_float(arr, fallback):
+                if arr is None:
+                    return fallback
+                value = float(arr[i])
+                return fallback if np.isnan(value) else value
+
             store._data[tuple(key.tolist())] = TrialResult(
                 success=bool(suc[i]),
                 fallen_before_push=bool(fallen[i]),
                 T_push_step=int(T_push[i]),
-                zmp_margins_settle=settle[settle_ptr:settle_ptr + s_len].tolist(),
-                zmp_margins_post=post[post_ptr:post_ptr + p_len].tolist(),
+                zmp_margins_settle=settle_values,
+                zmp_margins_post=post_values,
                 push_dir=dirs[i].tolist(),
+                push_step_abs=(
+                    int(push_step_abs_arr[i])
+                    if push_step_abs_arr is not None and int(push_step_abs_arr[i]) >= 0 else None
+                ),
+                push_phase=_optional_float(push_phase_arr, float("nan")),
+                pre_push_margin=_optional_float(pre_push_arr, fallback_pre),
+                min_zmp_after_push=_optional_float(min_post_arr, fallback_min_post),
+                mean_zmp_after_push=_optional_float(mean_post_arr, fallback_mean_post),
+                margin_drop=_optional_float(drop_arr, fallback_drop),
             )
             settle_ptr += s_len
             post_ptr   += p_len
@@ -161,20 +213,22 @@ class ResultsStore:
         for ei in range(n_eps):
             merged[ei] = {}
             for pi in range(n_pvel):
-                rates, conditional_rates, pre_fall_rates, zmps, names = [], [], [], [], []
+                rates, conditional_rates, pre_fall_rates, zmps, drops, names = [], [], [], [], [], []
                 for name, summary in named_summaries:
                     cell = summary[ei][pi]
                     if not np.isnan(cell["end_to_end_success_rate"]):
                         rates.append(cell["end_to_end_success_rate"])
                         conditional_rates.append(cell["conditional_recovery_rate"])
                         pre_fall_rates.append(cell["pre_fall_rate"])
-                        zmps.append(cell["mean_zmp_settle"])
+                        zmps.append(cell["mean_min_zmp_after_push"])
+                        drops.append(cell["mean_margin_drop"])
                         names.append(name)
 
                 rates_arr = np.array(rates)
                 cond_arr = np.array(conditional_rates, dtype=float)
                 pre_arr = np.array(pre_fall_rates, dtype=float)
                 zmps_arr  = np.array(zmps)
+                drops_arr = np.array(drops)
 
                 # Pooled Bernoulli CI: use end-to-end success rate and total n.
                 # Pre-push falls are failures, so all completed trials contribute.
@@ -194,6 +248,7 @@ class ResultsStore:
                     "conditional_rates_per_motion": conditional_rates,
                     "pre_fall_rates_per_motion": pre_fall_rates,
                     "zmp_per_motion":   zmps,
+                    "margin_drop_per_motion": drops,
                     "mean_rate":        mean_r,
                     "std_rate":         float(np.std(rates_arr)) if len(rates_arr) > 1 else 0.0,
                     "mean_conditional_rate": (
@@ -206,6 +261,14 @@ class ResultsStore:
                     ),
                     "mean_zmp":         float(np.mean(zmps_arr)) if len(zmps_arr) else float("nan"),
                     "std_zmp":          float(np.std(zmps_arr))  if len(zmps_arr) > 1 else 0.0,
+                    "mean_margin_drop": (
+                        float(np.nanmean(drops_arr))
+                        if len(drops_arr) and np.isfinite(drops_arr).any() else float("nan")
+                    ),
+                    "std_margin_drop": (
+                        float(np.nanstd(drops_arr))
+                        if len(drops_arr) and np.isfinite(drops_arr).any() else float("nan")
+                    ),
                     "ci_rate":          ci,
                 }
 
@@ -223,8 +286,12 @@ class ResultsStore:
               'n_total':       int,
               'n_fallen_before': int,
               'pre_fall_rate': float,
-              'mean_zmp_settle': float,    # mean ZMP margin during settle phase (m)
+              'mean_zmp_settle': float,    # mean pre-push margin (m)
               'std_zmp_settle':  float,
+              'mean_min_zmp_after_push': float,
+              'std_min_zmp_after_push':  float,
+              'mean_margin_drop': float,
+              'std_margin_drop':  float,
           }
         """
         if perturbation_mode is not None:
@@ -247,6 +314,7 @@ class ResultsStore:
             summary[ei] = {}
             for pi in range(n_pvel):
                 success_after_push, end_to_end_success, fallen_list, settle_zmp_all = [], [], [], []
+                min_post_all, mean_post_all, margin_drop_all, push_phase_all = [], [], [], []
 
                 for ti in range(self.meta["n_trials"]):
                     key = (mode_idx, ei, pi, ti) if self._has_mode_axis() else (ei, pi, ti)
@@ -258,6 +326,20 @@ class ResultsStore:
                     if not r.fallen_before_push:
                         success_after_push.append(int(r.success))
                     settle_zmp_all.extend(r.zmp_margins_settle)
+                    if r.min_zmp_after_push is not None and not np.isnan(r.min_zmp_after_push):
+                        min_post_all.append(float(r.min_zmp_after_push))
+                    elif r.zmp_margins_post:
+                        min_post_all.append(float(np.min(r.zmp_margins_post)))
+                    if r.mean_zmp_after_push is not None and not np.isnan(r.mean_zmp_after_push):
+                        mean_post_all.append(float(r.mean_zmp_after_push))
+                    elif r.zmp_margins_post:
+                        mean_post_all.append(float(np.mean(r.zmp_margins_post)))
+                    if r.margin_drop is not None and not np.isnan(r.margin_drop):
+                        margin_drop_all.append(float(r.margin_drop))
+                    elif r.zmp_margins_settle and r.zmp_margins_post:
+                        margin_drop_all.append(float(r.zmp_margins_settle[-1] - np.min(r.zmp_margins_post)))
+                    if r.push_phase is not None and not np.isnan(r.push_phase):
+                        push_phase_all.append(float(r.push_phase))
 
                 n_total  = len(fallen_list)
                 n_valid  = len(success_after_push)
@@ -267,6 +349,14 @@ class ResultsStore:
                 pre_rate = float(n_fallen / n_total) if n_total > 0 else float("nan")
                 mean_zmp = float(np.mean(settle_zmp_all)) if settle_zmp_all else float("nan")
                 std_zmp  = float(np.std(settle_zmp_all))  if settle_zmp_all else float("nan")
+                mean_min_post = float(np.mean(min_post_all)) if min_post_all else float("nan")
+                std_min_post = float(np.std(min_post_all)) if min_post_all else float("nan")
+                mean_post = float(np.mean(mean_post_all)) if mean_post_all else float("nan")
+                std_post = float(np.std(mean_post_all)) if mean_post_all else float("nan")
+                mean_drop = float(np.mean(margin_drop_all)) if margin_drop_all else float("nan")
+                std_drop = float(np.std(margin_drop_all)) if margin_drop_all else float("nan")
+                mean_phase = float(np.mean(push_phase_all)) if push_phase_all else float("nan")
+                std_phase = float(np.std(push_phase_all)) if push_phase_all else float("nan")
 
                 summary[ei][pi] = {
                     "epsilon":          eps_vals[ei],
@@ -282,6 +372,14 @@ class ResultsStore:
                     "pre_fall_rate":    pre_rate,
                     "mean_zmp_settle":  mean_zmp,
                     "std_zmp_settle":   std_zmp,
+                    "mean_min_zmp_after_push": mean_min_post,
+                    "std_min_zmp_after_push": std_min_post,
+                    "mean_zmp_after_push": mean_post,
+                    "std_zmp_after_push": std_post,
+                    "mean_margin_drop": mean_drop,
+                    "std_margin_drop": std_drop,
+                    "mean_push_phase": mean_phase,
+                    "std_push_phase": std_phase,
                 }
 
         return summary
@@ -323,6 +421,14 @@ class ResultsStore:
                         "pre_fall_rate": cell["pre_fall_rate"],
                         "mean_zmp_settle": cell["mean_zmp_settle"],
                         "std_zmp_settle": cell["std_zmp_settle"],
+                        "mean_min_zmp_after_push": cell["mean_min_zmp_after_push"],
+                        "std_min_zmp_after_push": cell["std_min_zmp_after_push"],
+                        "mean_zmp_after_push": cell["mean_zmp_after_push"],
+                        "std_zmp_after_push": cell["std_zmp_after_push"],
+                        "mean_margin_drop": cell["mean_margin_drop"],
+                        "std_margin_drop": cell["std_margin_drop"],
+                        "mean_push_phase": cell["mean_push_phase"],
+                        "std_push_phase": cell["std_push_phase"],
                     })
 
         path = os.path.join(output_dir, filename)
@@ -332,6 +438,10 @@ class ResultsStore:
                 "push_velocity_idx", "epsilon", "push_velocity", "n_total", "n_valid",
                 "n_fallen_before", "end_to_end_success_rate", "conditional_recovery_rate",
                 "pre_fall_rate", "mean_zmp_settle", "std_zmp_settle",
+                "mean_min_zmp_after_push", "std_min_zmp_after_push",
+                "mean_zmp_after_push", "std_zmp_after_push",
+                "mean_margin_drop", "std_margin_drop",
+                "mean_push_phase", "std_push_phase",
             ])
             writer.writeheader()
             writer.writerows(rows)
