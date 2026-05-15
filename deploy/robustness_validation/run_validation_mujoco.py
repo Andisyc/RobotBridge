@@ -21,6 +21,10 @@ import datetime as _datetime
 import json
 import math
 import os
+
+# Headless MuJoCo rendering must be configured before RobotBridge creates mujoco.Renderer.
+os.environ.setdefault("MUJOCO_GL", "egl")
+os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 from pathlib import Path
 import random
 import sys
@@ -165,27 +169,27 @@ class ReferenceFramePerturber:
 
     def apply_pos(self, pos: np.ndarray, clean_anchor_pos: np.ndarray | None = None) -> np.ndarray:
         delta = self.value(0 if self.last_timestep is None else self.last_timestep)
-        return np.asarray(pos, dtype=np.float64) + delta[:3]
+        return (np.asarray(pos, dtype=np.float64) + delta[:3]).astype(np.float64)
 
     def apply_quat(self, quat_xyzw: np.ndarray) -> np.ndarray:
         delta = self.value(0 if self.last_timestep is None else self.last_timestep)
         q_delta = _quat_from_euler_xyz(delta[3:6])
         q = np.asarray(quat_xyzw, dtype=np.float64).reshape(4)
-        return _quat_mul_xyzw(q_delta, q).astype(np.float32)
+        return _quat_mul_xyzw(q_delta, q).astype(np.float64)
 
     def transform_body_pos(self, body_pos: np.ndarray, clean_anchor_pos: np.ndarray) -> np.ndarray:
         delta = self.value(0 if self.last_timestep is None else self.last_timestep)
         rot = _quat_to_matrix_xyzw(_quat_from_euler_xyz(delta[3:6]))
         body = np.asarray(body_pos, dtype=np.float64)
         anchor = np.asarray(clean_anchor_pos, dtype=np.float64).reshape(1, 3)
-        return (anchor + delta[:3].reshape(1, 3) + (body - anchor) @ rot.T).astype(np.float32)
+        return (anchor + delta[:3].reshape(1, 3) + (body - anchor) @ rot.T).astype(np.float64)
 
     def transform_body_quat(self, body_quat_xyzw: np.ndarray) -> np.ndarray:
         delta = self.value(0 if self.last_timestep is None else self.last_timestep)
         q_delta = _quat_from_euler_xyz(delta[3:6])
         body_q = np.asarray(body_quat_xyzw, dtype=np.float64).reshape(-1, 4)
         q_delta_batch = np.broadcast_to(q_delta.reshape(1, 4), body_q.shape)
-        return _quat_mul_xyzw(q_delta_batch, body_q).astype(np.float32)
+        return _quat_mul_xyzw(q_delta_batch, body_q).astype(np.float64)
 
 
 def install_robotbridge_perturbation_patch(robotbridge_deploy: Path) -> None:
@@ -211,7 +215,7 @@ def install_robotbridge_perturbation_patch(robotbridge_deploy: Path) -> None:
         if pert is None:
             return clean
         pert.value(int(self.timestep))
-        return pert.apply_pos(clean).astype(np.float32)
+        return pert.apply_pos(clean).astype(np.float64)
 
     def anchor_quat_w(self):
         clean = orig_anchor_quat(self)
@@ -219,7 +223,7 @@ def install_robotbridge_perturbation_patch(robotbridge_deploy: Path) -> None:
         if pert is None:
             return clean
         pert.value(int(self.timestep))
-        return pert.apply_quat(clean)
+        return pert.apply_quat(clean).astype(np.float64)
 
     def body_pos_w_aligned(self):
         clean = orig_body_pos(self)
