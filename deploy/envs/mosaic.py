@@ -350,7 +350,6 @@ class MosaicEnv(BaseEnv):
         if body_pos_aligned.size == 0:
             return None
 
-        logger.debug(f"[MosaicEnv] Marker mean pos: {np.mean(body_pos_aligned):.4f}")
         return body_pos_aligned.astype(np.float32)
     
     def compute_observation(self):
