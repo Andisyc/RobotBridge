@@ -9,31 +9,31 @@ policy:
   save_video: false
 
 motion:
-  motion_path: ./data/motion/Walking/amass_g1_jump-06-rope normal run fast-kudo_poses.npz
+  motion_path: ./data/motion/Lateral/
 
   # Walking
-  # 'amass_g1_jump-06-rope normal run fast-kudo_poses.npz'
-  # 'amass_g1_jump-05-rope normal run-kudo_poses.npz'
-  # 'amass_g1_jump-05-rope normal run-kawaguchi_poses.npz'
-  # 'amass_g1_jump-06-rope normal run fast-hamada_poses.npz'
+  # amass_g1_jump-06-rope normal run fast-kudo_poses.npz
+  # amass_g1_jump-05-rope normal run-kudo_poses.npz
+  # amass_g1_jump-05-rope normal run-kawaguchi_poses.npz
+  # amass_g1_jump-06-rope normal run fast-hamada_poses.npz
 
   # Upper
-  # 'amass_g1_soccer-03-volley kick-ichige_poses.npz'
-  # 'amass_g1_gesture_etc-21-clapping-hamada_poses.npz'
-  # 'amass_g1_gesture_etc-21-clapping-aita_poses.npz'
-  # 'amass_g1_gesture_etc-20-swing chair-aita_poses.npz'
+  # amass_g1_soccer-03-volley kick-ichige_poses.npz
+  # amass_g1_gesture_etc-21-clapping-hamada_poses.npz
+  # amass_g1_gesture_etc-21-clapping-aita_poses.npz
+  # amass_g1_gesture_etc-20-swing chair-aita_poses.npz
 
   # Turning
-  # 'amass_g1_accident-14-dodge turn down-kaiwa_poses.npz'
-  # 'amass_g1_turn-05-turn-hamada_poses.npz'
-  # 'amass_g1_turn-05-turn-aita_poses.npz'
-  # 'amass_g1_accident-14-dodge turn down-aita_poses.npz'
+  # amass_g1_accident-14-dodge turn down-kaiwa_poses.npz
+  # amass_g1_turn-05-turn-hamada_poses.npz
+  # amass_g1_turn-05-turn-aita_poses.npz
+  # amass_g1_accident-14-dodge turn down-aita_poses.npz
 
   # Lateral
-  # 'amass_g1_throw_toss-02-side-hamada_poses.npz'
-  # 'amass_g1_gesture_etc-35-west side-hamada_poses.npz'
-  # 'amass_g1_throw_toss-02-side-aita_poses.npz'
-  # 'amass_g1_gesture_etc-35-west side-aita_poses.npz'
+  # amass_g1_throw_toss-02-side-hamada_poses.npz
+  # amass_g1_gesture_etc-35-west side-hamada_poses.npz
+  # amass_g1_throw_toss-02-side-aita_poses.npz
+  # amass_g1_gesture_etc-35-west side-aita_poses.npz
 
   playback_speed: 1.0
   loop: True
