@@ -23,6 +23,26 @@ from pathlib import Path
 import imageio
 import mujoco
 
+
+def _matrix_to_rotvec(matrix: np.ndarray) -> np.ndarray:
+    """Convert a 3x3 rotation matrix into a compact axis-angle vector."""
+    mat = np.asarray(matrix, dtype=np.float64).reshape(3, 3)
+    trace = np.clip((np.trace(mat) - 1.0) * 0.5, -1.0, 1.0)
+    angle = float(np.arccos(trace))
+    if angle < 1e-6:
+        return np.zeros(3, dtype=np.float32)
+    axis = np.array(
+        [
+            mat[2, 1] - mat[1, 2],
+            mat[0, 2] - mat[2, 0],
+            mat[1, 0] - mat[0, 1],
+        ],
+        dtype=np.float64,
+    )
+    axis /= max(2.0 * np.sin(angle), 1e-8)
+    return (axis * angle).astype(np.float32)
+
+
 class MosaicEnv(BaseEnv):
     """Environment wrapper that mimics RoboJuDo's Mosaic pipeline on top of our framework."""
 
@@ -64,6 +84,7 @@ class MosaicEnv(BaseEnv):
         self._pending_alignment_reset: bool = True
 
         self.last_ref_dof_pos = np.zeros(self.num_action, dtype=np.float64)
+        self.frontres_anchor_error = np.zeros(6, dtype=np.float32)
 
         # Teleop smoothing parameters
         self.teleop_pos_ema_alpha = float(self.policy_cfg.get("teleop_pos_ema_alpha", 0.3))
@@ -372,6 +393,13 @@ class MosaicEnv(BaseEnv):
         obs_ref_project_gravity = quat_rotate_inverse(np.roll(anchor_quat_w, 1), self.gravity_w)
 
         mat = matrix_from_quat(ori)
+        self.frontres_anchor_error = np.concatenate(
+            [
+                np.asarray(pos, dtype=np.float32).reshape(3),
+                _matrix_to_rotvec(mat),
+            ],
+            axis=0,
+        ).astype(np.float32)
 
         obs_command = command
         obs_motion_anchor_pos_b = pos

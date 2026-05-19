@@ -102,6 +102,30 @@ def _quat_to_matrix_xyzw(q: np.ndarray) -> np.ndarray:
     )
 
 
+def _apply_task_delta_pos(pos: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    return (np.asarray(pos, dtype=np.float64) + np.asarray(delta, dtype=np.float64).reshape(6)[:3]).astype(np.float64)
+
+
+def _apply_task_delta_quat(quat_xyzw: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    q_delta = _quat_from_euler_xyz(np.asarray(delta, dtype=np.float64).reshape(6)[3:6])
+    return _quat_mul_xyzw(q_delta, np.asarray(quat_xyzw, dtype=np.float64).reshape(4)).astype(np.float64)
+
+
+def _apply_task_delta_body_pos(body_pos: np.ndarray, anchor_pos: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    delta = np.asarray(delta, dtype=np.float64).reshape(6)
+    rot = _quat_to_matrix_xyzw(_quat_from_euler_xyz(delta[3:6]))
+    body = np.asarray(body_pos, dtype=np.float64).reshape(-1, 3)
+    anchor = np.asarray(anchor_pos, dtype=np.float64).reshape(1, 3)
+    return (anchor + delta[:3].reshape(1, 3) + (body - anchor) @ rot.T).astype(np.float64)
+
+
+def _apply_task_delta_body_quat(body_quat_xyzw: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    q_delta = _quat_from_euler_xyz(np.asarray(delta, dtype=np.float64).reshape(6)[3:6])
+    body_q = np.asarray(body_quat_xyzw, dtype=np.float64).reshape(-1, 4)
+    q_delta_batch = np.broadcast_to(q_delta.reshape(1, 4), body_q.shape)
+    return _quat_mul_xyzw(q_delta_batch, body_q).astype(np.float64)
+
+
 def _write_status(output_dir: Path, status: str, **extra) -> None:
     payload = {
         "status": status,
@@ -211,38 +235,47 @@ def install_robotbridge_perturbation_patch(robotbridge_deploy: Path) -> None:
     def _pert(self):
         return getattr(self, "_validation_perturber", None)
 
+    def _frontres_delta(self):
+        return np.asarray(getattr(self, "_frontres_delta", np.zeros(6)), dtype=np.float64).reshape(6)
+
     def anchor_pos_w(self):
         clean = orig_anchor_pos(self)
         pert = _pert(self)
-        if pert is None:
-            return clean
-        pert.value(int(self.timestep))
-        return pert.apply_pos(clean).astype(np.float64)
+        out = np.asarray(clean, dtype=np.float64)
+        if pert is not None:
+            pert.value(int(self.timestep))
+            out = pert.apply_pos(out)
+        return _apply_task_delta_pos(out, _frontres_delta(self)).astype(np.float64)
 
     def anchor_quat_w(self):
         clean = orig_anchor_quat(self)
         pert = _pert(self)
-        if pert is None:
-            return clean
-        pert.value(int(self.timestep))
-        return pert.apply_quat(clean).astype(np.float64)
+        out = np.asarray(clean, dtype=np.float64)
+        if pert is not None:
+            pert.value(int(self.timestep))
+            out = pert.apply_quat(out)
+        return _apply_task_delta_quat(out, _frontres_delta(self)).astype(np.float64)
 
     def body_pos_w_aligned(self):
         clean = orig_body_pos(self)
-        pert = _pert(self)
-        if pert is None:
-            return clean
-        pert.value(int(self.timestep))
         clean_anchor = orig_anchor_pos(self)
-        return pert.transform_body_pos(clean, clean_anchor)
+        pert = _pert(self)
+        out = np.asarray(clean, dtype=np.float64)
+        anchor_after_pert = np.asarray(clean_anchor, dtype=np.float64)
+        if pert is not None:
+            pert.value(int(self.timestep))
+            out = pert.transform_body_pos(out, clean_anchor)
+            anchor_after_pert = pert.apply_pos(clean_anchor)
+        return _apply_task_delta_body_pos(out, anchor_after_pert, _frontres_delta(self))
 
     def body_quat_w_aligned(self):
         clean = orig_body_quat(self)
         pert = _pert(self)
-        if pert is None:
-            return clean
-        pert.value(int(self.timestep))
-        return pert.transform_body_quat(clean)
+        out = np.asarray(clean, dtype=np.float64)
+        if pert is not None:
+            pert.value(int(self.timestep))
+            out = pert.transform_body_quat(out)
+        return _apply_task_delta_body_quat(out, _frontres_delta(self))
 
     MotionDataset.anchor_pos_w = property(anchor_pos_w)
     MotionDataset.anchor_quat_w = property(anchor_quat_w)
@@ -312,16 +345,36 @@ def _upright_margin(env) -> float:
     return min(1.2 - roll_pitch, height - 0.35)
 
 
-def _run_policy_step(agent, obs_buf_dict):
+def _set_frontres_delta(env, delta: np.ndarray | None) -> None:
+    env.motion_loader._frontres_delta = (
+        np.zeros(6, dtype=np.float64)
+        if delta is None else np.asarray(delta, dtype=np.float64).reshape(6)
+    )
+
+
+def _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime):
+    if frontres_runtime is None:
+        return obs_buf_dict
+    delta = frontres_runtime.compute(agent.env, obs_buf_dict)
+    _set_frontres_delta(agent.env, delta)
+    agent.env.compute_observation()
+    return agent.env.obs_buf_dict
+
+
+def _run_policy_step(agent, obs_buf_dict, frontres_runtime=None):
+    obs_buf_dict = _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime)
     inputs = {key: obs_buf_dict[key].astype(np.float32) for key in obs_buf_dict}
     action = agent.policy.run(None, inputs)[0]
     return agent.env.step(action)
 
 
-def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, seed: int, args) -> TrialResult:
+def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, seed: int, args, frontres_runtime=None) -> TrialResult:
     env = agent.env
     env.motion_loader._validation_perturber = perturber
+    _set_frontres_delta(env, None)
     perturber.reset()
+    if frontres_runtime is not None:
+        frontres_runtime.reset()
     env.validation_terminated = False
 
     if env.video_recorder.enabled:
@@ -351,7 +404,7 @@ def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, s
             pre_push_margin = last_margin if last_margin is not None else _upright_margin(env)
             _apply_root_velocity_push(env, push_dir, push_velocity)
 
-        obs = _run_policy_step(agent, obs)
+        obs = _run_policy_step(agent, obs, frontres_runtime)
         margin = _upright_margin(env)
         if step < push_step_abs:
             settle_margins.append(margin)
@@ -368,6 +421,7 @@ def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, s
 
     if env.video_recorder.enabled:
         env.video_recorder.save(env.motion_loader, complete=success, reason="validation_trial")
+    _set_frontres_delta(env, None)
 
     return TrialResult(
         success=bool(success and not fallen_before_push),
@@ -398,6 +452,14 @@ def main() -> int:
     parser.add_argument("--motion", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True,
                         help="RobotBridge policy checkpoint, usually model_27000.onnx.")
+    parser.add_argument("--frontres_checkpoint", type=str, default=None,
+                        help="Optional MOSAIC FrontRES checkpoint. GMT ONNX is still supplied by --checkpoint.")
+    parser.add_argument("--frontres_device", type=str, default="cpu")
+    parser.add_argument("--frontres_history_length", type=int, default=5)
+    parser.add_argument("--frontres_max_delta_pos", type=float, default=0.3)
+    parser.add_argument("--frontres_max_delta_rpy", type=float, default=0.1)
+    parser.add_argument("--frontres_allow_upward_dz", action="store_true")
+    parser.add_argument("--frontres_ignore_conf", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--motion_group", type=str, default="Ungrouped")
     parser.add_argument("--motion_name", type=str, default=None)
@@ -434,6 +496,13 @@ def main() -> int:
         "motion_group": args.motion_group,
         "motion_name": args.motion_name,
         "checkpoint": str(Path(args.checkpoint).expanduser()),
+        "frontres_checkpoint": str(Path(args.frontres_checkpoint).expanduser()) if args.frontres_checkpoint else None,
+        "frontres_device": args.frontres_device,
+        "frontres_history_length": args.frontres_history_length,
+        "frontres_max_delta_pos": args.frontres_max_delta_pos,
+        "frontres_max_delta_rpy": args.frontres_max_delta_rpy,
+        "frontres_allow_upward_dz": args.frontres_allow_upward_dz,
+        "frontres_ignore_conf": args.frontres_ignore_conf,
         "epsilon_values": args.epsilon_values,
         "push_velocities": args.push_velocities,
         "perturbation_modes": args.perturbation_modes,
@@ -452,6 +521,24 @@ def main() -> int:
     try:
         agent = _instantiate_robotbridge_agent(args)
         _patch_no_auto_reset(agent.env)
+        frontres_runtime = None
+        if args.frontres_checkpoint:
+            from frontres_runtime import FrontRESRuntime
+
+            frontres_runtime = FrontRESRuntime(
+                checkpoint=args.frontres_checkpoint,
+                device=args.frontres_device,
+                history_length=args.frontres_history_length,
+                max_delta_pos=args.frontres_max_delta_pos,
+                max_delta_rpy=args.frontres_max_delta_rpy,
+                allow_upward_dz=args.frontres_allow_upward_dz,
+                ignore_conf=args.frontres_ignore_conf,
+            )
+            print(
+                f"[MuJoCoValidation] FrontRES enabled: {frontres_runtime.checkpoint} "
+                f"(device={args.frontres_device}, history={args.frontres_history_length})",
+                flush=True,
+            )
 
         dt = float(getattr(agent.env.simulator, "high_dt", 0.02))
         for mode_idx, mode in enumerate(args.perturbation_modes):
@@ -472,7 +559,7 @@ def main() -> int:
                             iid_ratio=args.iid_ratio,
                             seed=seed,
                         )
-                        result = run_trial(agent, perturber, push_velocity, seed, args)
+                        result = run_trial(agent, perturber, push_velocity, seed, args, frontres_runtime)
                         store.add(mode_idx, eps_idx, push_idx, trial_idx, result)
                         print(
                             "[MuJoCoValidation] "

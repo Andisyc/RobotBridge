@@ -45,6 +45,14 @@ def main() -> int:
     parser.add_argument("--motion_root", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True,
                         help="RobotBridge policy checkpoint, usually model_27000.onnx.")
+    parser.add_argument("--frontres_checkpoint", type=str, default=None,
+                        help="Optional MOSAIC FrontRES checkpoint for FrontRES+GMT validation.")
+    parser.add_argument("--frontres_device", type=str, default="cpu")
+    parser.add_argument("--frontres_history_length", type=int, default=5)
+    parser.add_argument("--frontres_max_delta_pos", type=float, default=0.3)
+    parser.add_argument("--frontres_max_delta_rpy", type=float, default=0.1)
+    parser.add_argument("--frontres_allow_upward_dz", action="store_true")
+    parser.add_argument("--frontres_ignore_conf", action="store_true")
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--groups", type=str, nargs="+", default=DEFAULT_GROUPS)
     parser.add_argument("--file_glob", type=str, default="*.npz")
@@ -77,6 +85,13 @@ def main() -> int:
         "robotbridge_root": str(Path(args.robotbridge_root).expanduser()),
         "motion_root": str(motion_root),
         "checkpoint": args.checkpoint,
+        "frontres_checkpoint": args.frontres_checkpoint,
+        "frontres_device": args.frontres_device,
+        "frontres_history_length": args.frontres_history_length,
+        "frontres_max_delta_pos": args.frontres_max_delta_pos,
+        "frontres_max_delta_rpy": args.frontres_max_delta_rpy,
+        "frontres_allow_upward_dz": args.frontres_allow_upward_dz,
+        "frontres_ignore_conf": args.frontres_ignore_conf,
         "groups": args.groups,
         "file_glob": args.file_glob,
         "n_trials": args.num_trials,
@@ -123,6 +138,18 @@ def main() -> int:
         ]
         if args.record_video:
             cmd.append("--record_video")
+        if args.frontres_checkpoint:
+            cmd.extend([
+                "--frontres_checkpoint", args.frontres_checkpoint,
+                "--frontres_device", args.frontres_device,
+                "--frontres_history_length", str(args.frontres_history_length),
+                "--frontres_max_delta_pos", str(args.frontres_max_delta_pos),
+                "--frontres_max_delta_rpy", str(args.frontres_max_delta_rpy),
+            ])
+            if args.frontres_allow_upward_dz:
+                cmd.append("--frontres_allow_upward_dz")
+            if args.frontres_ignore_conf:
+                cmd.append("--frontres_ignore_conf")
 
         print(f"[mujoco-batch] [{idx}/{len(jobs)}] running: {group}/{motion_path.name}", flush=True)
         completed = subprocess.run(cmd, cwd=Path.cwd())
