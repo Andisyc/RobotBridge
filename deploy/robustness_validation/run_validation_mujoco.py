@@ -492,6 +492,7 @@ def main() -> int:
     args.policy_variant = "frontres" if args.frontres_checkpoint else "baseline"
 
     output_dir = Path(args.output_dir).expanduser().resolve()
+    args.output_dir = str(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if args.motion_name is None:
         args.motion_name = Path(args.motion).stem
