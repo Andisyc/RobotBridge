@@ -302,7 +302,10 @@ def _compose_robotbridge_cfg(args: argparse.Namespace):
     cfg.robot.control.viewer = False
     cfg.robot.control.real_time = False
     cfg.env.config.record_video.enabled = bool(args.record_video)
-    cfg.env.config.record_video.output_dir = str((Path(args.output_dir) / "videos").resolve())
+    video_dir = Path(args.output_dir) / "videos" / args.policy_variant
+    if args.video_tag:
+        video_dir = video_dir / _safe_token(args.video_tag)
+    cfg.env.config.record_video.output_dir = str(video_dir.resolve())
     cfg.env.config.record_video.fps = int(args.video_fps)
     cfg.env.config.record_video.width = int(args.video_width)
     cfg.env.config.record_video.height = int(args.video_height)
@@ -461,6 +464,8 @@ def main() -> int:
     parser.add_argument("--frontres_allow_upward_dz", action="store_true")
     parser.add_argument("--frontres_ignore_conf", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--video_tag", type=str, default=None,
+                        help="Optional label added to video directory and file prefix, e.g. demo_frontres.")
     parser.add_argument("--motion_group", type=str, default="Ungrouped")
     parser.add_argument("--motion_name", type=str, default=None)
     parser.add_argument("--epsilon_values", type=float, nargs="+", default=EPSILON_VALUES)
@@ -484,6 +489,7 @@ def main() -> int:
     parser.add_argument("--video_width", type=int, default=640)
     parser.add_argument("--video_height", type=int, default=480)
     args = parser.parse_args()
+    args.policy_variant = "frontres" if args.frontres_checkpoint else "baseline"
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -496,6 +502,8 @@ def main() -> int:
         "motion_group": args.motion_group,
         "motion_name": args.motion_name,
         "checkpoint": str(Path(args.checkpoint).expanduser()),
+        "policy_variant": args.policy_variant,
+        "video_tag": args.video_tag,
         "frontres_checkpoint": str(Path(args.frontres_checkpoint).expanduser()) if args.frontres_checkpoint else None,
         "frontres_device": args.frontres_device,
         "frontres_history_length": args.frontres_history_length,
@@ -549,7 +557,11 @@ def main() -> int:
                             f"{mode}_eps{eps:g}_push{push_velocity:g}_trial{trial_idx:02d}"
                         )
                         if agent.env.video_recorder.enabled:
-                            agent.env.video_recorder.prefix = f"mujoco_{_safe_token(token)}"
+                            prefix_parts = ["mujoco", args.policy_variant]
+                            if args.video_tag:
+                                prefix_parts.append(_safe_token(args.video_tag))
+                            prefix_parts.append(_safe_token(token))
+                            agent.env.video_recorder.prefix = "_".join(prefix_parts)
                         seed = args.seed + 100000 * mode_idx + 1000 * eps_idx + 100 * push_idx + trial_idx
                         perturber = ReferenceFramePerturber(
                             epsilon=eps,
