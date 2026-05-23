@@ -302,7 +302,9 @@ def _compose_robotbridge_cfg(args: argparse.Namespace):
     cfg.robot.control.viewer = False
     cfg.robot.control.real_time = False
     cfg.env.config.record_video.enabled = bool(args.record_video)
-    video_dir = Path(args.output_dir) / "videos" / args.policy_variant
+    video_dir = Path(args.video_output_dir)
+    if bool(getattr(args, "use_variant_subdir", False)):
+        video_dir = video_dir / args.policy_variant
     if args.video_tag:
         video_dir = video_dir / _safe_token(args.video_tag)
     cfg.env.config.record_video.output_dir = str(video_dir.resolve())
@@ -464,6 +466,10 @@ def main() -> int:
     parser.add_argument("--frontres_allow_upward_dz", action="store_true")
     parser.add_argument("--frontres_ignore_conf", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--run_name", type=str, default=None,
+                        help="Shared run folder name. Use the same value for baseline and FrontRES.")
+    parser.add_argument("--no_timestamp", action="store_true",
+                        help="Write directly under --output_dir instead of creating a timestamped run folder.")
     parser.add_argument("--video_tag", type=str, default=None,
                         help="Optional label added to video directory and file prefix, e.g. demo_frontres.")
     parser.add_argument("--motion_group", type=str, default="Ungrouped")
@@ -491,14 +497,41 @@ def main() -> int:
     args = parser.parse_args()
     args.policy_variant = "frontres" if args.frontres_checkpoint else "baseline"
 
-    output_dir = Path(args.output_dir).expanduser().resolve()
+    output_root = Path(args.output_dir).expanduser().resolve()
+    is_frontres_run = bool(args.frontres_checkpoint)
+    if args.no_timestamp:
+        run_root = output_root
+        run_name = output_root.name
+    else:
+        run_name = _safe_token(args.run_name) if args.run_name else (
+            f"run_{_datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        run_root = output_root / run_name
+    if is_frontres_run:
+        # A FrontRES smoke/demo run already contains its paired baseline sequence
+        # internally, so keep it as one standalone run instead of nesting a
+        # redundant frontres/baseline variant folder.
+        output_dir = run_root
+        args.video_output_dir = str(run_root / "videos")
+        args.use_variant_subdir = False
+    else:
+        # Plain GMT validation remains a baseline artifact and should stay under
+        # the caller's robustness_validation_mujoco output root.
+        output_dir = run_root / args.policy_variant
+        args.video_output_dir = str(run_root / "videos")
+        args.use_variant_subdir = True
     args.output_dir = str(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    Path(args.video_output_dir).mkdir(parents=True, exist_ok=True)
     if args.motion_name is None:
         args.motion_name = Path(args.motion).stem
 
     meta = {
         "backend": "RobotBridge/MuJoCo",
+        "run_name": run_name,
+        "run_root": str(run_root),
+        "variant_output_dir": str(output_dir),
+        "video_output_dir": args.video_output_dir,
         "motion": str(Path(args.motion).expanduser()),
         "motion_group": args.motion_group,
         "motion_name": args.motion_name,
