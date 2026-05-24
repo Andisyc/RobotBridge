@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _datetime
+import gc
 import json
 import math
 import os
@@ -340,6 +341,24 @@ def _instantiate_robotbridge_agent(args: argparse.Namespace):
     return instantiate(cfg.agent)
 
 
+def _close_robotbridge_agent(agent) -> None:
+    """Release MuJoCo video/rendering resources before Python teardown."""
+    if agent is None:
+        return
+    env = getattr(agent, "env", None)
+    recorder = getattr(env, "video_recorder", None)
+    if recorder is not None and hasattr(recorder, "close"):
+        recorder.close()
+    simulator = getattr(env, "simulator", None)
+    close_sim = getattr(simulator, "close", None)
+    if callable(close_sim):
+        close_sim()
+    close_env = getattr(env, "close", None)
+    if callable(close_env):
+        close_env()
+    gc.collect()
+
+
 def _patch_no_auto_reset(env) -> None:
     def _check_termination_no_reset(self):
         self.validation_terminated = bool(self.simulator.check_termination())
@@ -573,6 +592,7 @@ def main() -> int:
     store = ResultsStore(meta)
     _write_status(output_dir, "running", **meta)
 
+    agent = None
     try:
         agent = _instantiate_robotbridge_agent(args)
         _patch_no_auto_reset(agent.env)
@@ -640,6 +660,8 @@ def main() -> int:
     except Exception as exc:
         _write_status(output_dir, "failed", error=repr(exc), **meta)
         raise
+    finally:
+        _close_robotbridge_agent(agent)
 
 
 if __name__ == "__main__":
