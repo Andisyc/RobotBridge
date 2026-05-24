@@ -90,6 +90,27 @@ def _quat_mul_xyzw(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     return out / np.maximum(norm, 1e-12)
 
 
+def _quat_inv_xyzw(q: np.ndarray) -> np.ndarray:
+    q = np.asarray(q, dtype=np.float64)
+    out = q.copy()
+    out[..., :3] *= -1.0
+    denom = np.sum(q * q, axis=-1, keepdims=True)
+    return out / np.maximum(denom, 1e-12)
+
+
+def _quat_to_rotvec_xyzw(q: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    q = np.asarray(q, dtype=np.float64).reshape(4)
+    q = q / max(np.linalg.norm(q), eps)
+    if q[3] < 0.0:
+        q = -q
+    xyz = q[:3]
+    xyz_norm = np.linalg.norm(xyz)
+    angle = 2.0 * math.atan2(xyz_norm, q[3])
+    if xyz_norm <= eps:
+        return (2.0 * xyz).astype(np.float64)
+    return (xyz * (angle / xyz_norm)).astype(np.float64)
+
+
 def _quat_to_matrix_xyzw(q: np.ndarray) -> np.ndarray:
     x, y, z, w = [float(v) for v in np.asarray(q, dtype=np.float64).reshape(4)]
     xx, yy, zz = x * x, y * y, z * z
@@ -111,7 +132,9 @@ def _apply_task_delta_pos(pos: np.ndarray, delta: np.ndarray) -> np.ndarray:
 
 def _apply_task_delta_quat(quat_xyzw: np.ndarray, delta: np.ndarray) -> np.ndarray:
     q_delta = _quat_from_euler_xyz(np.asarray(delta, dtype=np.float64).reshape(6)[3:6])
-    return _quat_mul_xyzw(q_delta, np.asarray(quat_xyzw, dtype=np.float64).reshape(4)).astype(np.float64)
+    # Match MOSAIC: FrontRES predicts a local-frame correction that is
+    # right-multiplied onto the perturbed anchor quaternion.
+    return _quat_mul_xyzw(np.asarray(quat_xyzw, dtype=np.float64).reshape(4), q_delta).astype(np.float64)
 
 
 def _apply_task_delta_body_pos(body_pos: np.ndarray, anchor_pos: np.ndarray, delta: np.ndarray) -> np.ndarray:
@@ -126,7 +149,7 @@ def _apply_task_delta_body_quat(body_quat_xyzw: np.ndarray, delta: np.ndarray) -
     q_delta = _quat_from_euler_xyz(np.asarray(delta, dtype=np.float64).reshape(6)[3:6])
     body_q = np.asarray(body_quat_xyzw, dtype=np.float64).reshape(-1, 4)
     q_delta_batch = np.broadcast_to(q_delta.reshape(1, 4), body_q.shape)
-    return _quat_mul_xyzw(q_delta_batch, body_q).astype(np.float64)
+    return _quat_mul_xyzw(body_q, q_delta_batch).astype(np.float64)
 
 
 def _write_status(output_dir: Path, status: str, **extra) -> None:
@@ -402,10 +425,22 @@ def _set_frontres_delta(env, delta: np.ndarray | None) -> None:
 def _set_frontres_anchor_error_from_perturber(env, perturber: ReferenceFramePerturber | None) -> None:
     if perturber is None:
         return
-    timestep = int(getattr(env.motion_loader, "timestep", 0))
-    # Match IsaacLab training: FrontRES observes the anti-perturbation signal
-    # (clean reference minus perturbed reference), not the robot tracking error.
-    env.frontres_anchor_error = (-perturber.value(timestep)).astype(np.float32)
+    loader = env.motion_loader
+    timestep = int(getattr(loader, "timestep", 0))
+    delta = perturber.value(timestep)
+
+    # Match IsaacLab training: FrontRES observes the correction that undoes the
+    # injected reference-frame artifact, not the robot tracking residual.
+    anchor_idx = int(loader.motion_anchor_body_index)
+    clean_raw = loader.motion.body_quat_w[timestep, anchor_idx].copy()[[1, 2, 3, 0]]
+    clean_quat = loader.motion_init_align.align_quat(clean_raw)
+    pert_quat = perturber.apply_quat(clean_quat)
+    corr_quat = _quat_mul_xyzw(_quat_inv_xyzw(pert_quat), clean_quat)
+
+    target = np.zeros(6, dtype=np.float64)
+    target[:3] = -delta[:3]
+    target[3:6] = _quat_to_rotvec_xyzw(corr_quat)
+    env.frontres_anchor_error = target.astype(np.float32)
 
 
 def _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime, perturber=None):
@@ -515,6 +550,8 @@ def main() -> int:
     parser.add_argument("--frontres_history_length", type=int, default=5)
     parser.add_argument("--frontres_max_delta_pos", type=float, default=0.3)
     parser.add_argument("--frontres_max_delta_rpy", type=float, default=0.1)
+    parser.add_argument("--frontres_active_task_dims", type=int, nargs="+", default=[2, 3, 4, 6, 7],
+                        help="Task-space output dims enabled for FEMR. Default matches rp_z specialist.")
     parser.add_argument("--frontres_allow_upward_dz", action="store_true")
     parser.add_argument("--frontres_ignore_conf", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True)
@@ -595,6 +632,7 @@ def main() -> int:
         "frontres_history_length": args.frontres_history_length,
         "frontres_max_delta_pos": args.frontres_max_delta_pos,
         "frontres_max_delta_rpy": args.frontres_max_delta_rpy,
+        "frontres_active_task_dims": args.frontres_active_task_dims,
         "frontres_allow_upward_dz": args.frontres_allow_upward_dz,
         "frontres_ignore_conf": args.frontres_ignore_conf,
         "epsilon_values": args.epsilon_values,
@@ -628,6 +666,7 @@ def main() -> int:
                 max_delta_rpy=args.frontres_max_delta_rpy,
                 allow_upward_dz=args.frontres_allow_upward_dz,
                 ignore_conf=args.frontres_ignore_conf,
+                active_task_dims=args.frontres_active_task_dims,
             )
             print(
                 f"[MuJoCoValidation] FrontRES enabled: {frontres_runtime.checkpoint} "

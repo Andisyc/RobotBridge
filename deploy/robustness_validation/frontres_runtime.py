@@ -88,6 +88,7 @@ class FrontRESRuntime:
         max_delta_rpy: float = 0.1,
         allow_upward_dz: bool = False,
         ignore_conf: bool = False,
+        active_task_dims: tuple[int, ...] | list[int] | None = None,
     ) -> None:
         self.checkpoint = Path(checkpoint).expanduser().resolve()
         self.device = torch.device(device)
@@ -96,6 +97,7 @@ class FrontRESRuntime:
         self.max_delta_rpy = float(max_delta_rpy)
         self.allow_upward_dz = bool(allow_upward_dz)
         self.ignore_conf = bool(ignore_conf)
+        self.active_task_dims = None if active_task_dims is None else tuple(int(v) for v in active_task_dims)
 
         checkpoint_obj = torch.load(self.checkpoint, map_location=self.device)
         model_state = checkpoint_obj.get("model_state_dict", checkpoint_obj)
@@ -149,9 +151,20 @@ class FrontRESRuntime:
 
         delta_pos = np.tanh(raw_np[:3]) * self.max_delta_pos
         delta_rpy = np.tanh(raw_np[3:6]) * self.max_delta_rpy
+        conf_pos = np.ones(1, dtype=np.float32)
+        conf_rpy = np.ones(1, dtype=np.float32)
         if raw_np.shape[0] >= 8 and not self.ignore_conf:
-            delta_pos *= 1.0 / (1.0 + np.exp(-raw_np[6]))
-            delta_rpy *= 1.0 / (1.0 + np.exp(-raw_np[7]))
+            conf_pos[...] = 1.0 / (1.0 + np.exp(-raw_np[6]))
+            conf_rpy[...] = 1.0 / (1.0 + np.exp(-raw_np[7]))
+        correction = np.concatenate([delta_pos, delta_rpy, conf_pos, conf_rpy]).astype(np.float32)
+        if self.active_task_dims is not None:
+            mask = np.zeros_like(correction)
+            for idx in self.active_task_dims:
+                if 0 <= idx < mask.shape[0]:
+                    mask[idx] = 1.0
+            correction *= mask
+        delta_pos = correction[:3] * correction[6]
+        delta_rpy = correction[3:6] * correction[7]
         if not self.allow_upward_dz:
             delta_pos[2] = min(float(delta_pos[2]), 0.0)
 
