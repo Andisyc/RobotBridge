@@ -399,17 +399,27 @@ def _set_frontres_delta(env, delta: np.ndarray | None) -> None:
     )
 
 
-def _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime):
+def _set_frontres_anchor_error_from_perturber(env, perturber: ReferenceFramePerturber | None) -> None:
+    if perturber is None:
+        return
+    timestep = int(getattr(env.motion_loader, "timestep", 0))
+    # Match IsaacLab training: FrontRES observes the anti-perturbation signal
+    # (clean reference minus perturbed reference), not the robot tracking error.
+    env.frontres_anchor_error = (-perturber.value(timestep)).astype(np.float32)
+
+
+def _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime, perturber=None):
     if frontres_runtime is None:
         return obs_buf_dict
+    _set_frontres_anchor_error_from_perturber(agent.env, perturber)
     delta = frontres_runtime.compute(agent.env, obs_buf_dict)
     _set_frontres_delta(agent.env, delta)
     agent.env.compute_observation()
     return agent.env.obs_buf_dict
 
 
-def _run_policy_step(agent, obs_buf_dict, frontres_runtime=None):
-    obs_buf_dict = _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime)
+def _run_policy_step(agent, obs_buf_dict, frontres_runtime=None, perturber=None):
+    obs_buf_dict = _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime, perturber)
     inputs = {key: obs_buf_dict[key].astype(np.float32) for key in obs_buf_dict}
     action = agent.policy.run(None, inputs)[0]
     return agent.env.step(action)
@@ -451,7 +461,7 @@ def run_trial(agent, perturber: ReferenceFramePerturber, push_velocity: float, s
             pre_push_margin = last_margin if last_margin is not None else _upright_margin(env)
             _apply_root_velocity_push(env, push_dir, push_velocity)
 
-        obs = _run_policy_step(agent, obs, frontres_runtime)
+        obs = _run_policy_step(agent, obs, frontres_runtime, perturber)
         margin = _upright_margin(env)
         if step < push_step_abs:
             settle_margins.append(margin)
