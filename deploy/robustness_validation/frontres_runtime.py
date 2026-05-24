@@ -89,7 +89,7 @@ class FrontRESRuntime:
         allow_upward_dz: bool = False,
         ignore_conf: bool = False,
         active_task_dims: tuple[int, ...] | list[int] | None = None,
-        subtract_zero_error_bias: bool = True,
+        subtract_zero_error_bias: bool = False,
     ) -> None:
         self.checkpoint = Path(checkpoint).expanduser().resolve()
         self.device = torch.device(device)

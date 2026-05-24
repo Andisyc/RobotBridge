@@ -295,25 +295,13 @@ def install_robotbridge_perturbation_patch(robotbridge_deploy: Path) -> None:
         return _apply_task_delta_quat(out, _frontres_delta(self)).astype(np.float64)
 
     def body_pos_w_aligned(self):
-        clean = orig_body_pos(self)
-        clean_anchor = orig_anchor_pos(self)
-        pert = _pert(self)
-        out = np.asarray(clean, dtype=np.float64)
-        anchor_after_pert = np.asarray(clean_anchor, dtype=np.float64)
-        if pert is not None:
-            pert.value(int(self.timestep))
-            out = pert.transform_body_pos(out, clean_anchor)
-            anchor_after_pert = pert.apply_pos(clean_anchor)
-        return _apply_task_delta_body_pos(out, anchor_after_pert, _frontres_delta(self))
+        # Match MOSAIC: FrontRES/DR changes the anchor command, not the full
+        # clean motion library body poses. RobotBridge later computes relative
+        # body targets from clean body poses and the perturbed/corrected anchor.
+        return np.asarray(orig_body_pos(self), dtype=np.float64)
 
     def body_quat_w_aligned(self):
-        clean = orig_body_quat(self)
-        pert = _pert(self)
-        out = np.asarray(clean, dtype=np.float64)
-        if pert is not None:
-            pert.value(int(self.timestep))
-            out = pert.transform_body_quat(out)
-        return _apply_task_delta_body_quat(out, _frontres_delta(self))
+        return np.asarray(orig_body_quat(self), dtype=np.float64)
 
     MotionDataset.anchor_pos_w = property(anchor_pos_w)
     MotionDataset.anchor_quat_w = property(anchor_quat_w)
@@ -566,8 +554,8 @@ def main() -> int:
                         help="Task-space output dims enabled for FEMR. Default matches rp_z specialist.")
     parser.add_argument("--frontres_allow_upward_dz", action="store_true")
     parser.add_argument("--frontres_ignore_conf", action="store_true")
-    parser.add_argument("--frontres_no_bias_subtraction", action="store_true",
-                        help="Disable zero-error FEMR output subtraction.")
+    parser.add_argument("--frontres_subtract_zero_error_bias", action="store_true",
+                        help="Enable deployment-only zero-error FEMR output subtraction.")
     parser.add_argument("--frontres_debug_delta", action="store_true",
                         help="Print FEMR target/delta/bias values every 30 motion steps.")
     parser.add_argument("--output_dir", type=str, required=True)
@@ -651,7 +639,7 @@ def main() -> int:
         "frontres_active_task_dims": args.frontres_active_task_dims,
         "frontres_allow_upward_dz": args.frontres_allow_upward_dz,
         "frontres_ignore_conf": args.frontres_ignore_conf,
-        "frontres_subtract_zero_error_bias": not args.frontres_no_bias_subtraction,
+        "frontres_subtract_zero_error_bias": args.frontres_subtract_zero_error_bias,
         "frontres_debug_delta": args.frontres_debug_delta,
         "epsilon_values": args.epsilon_values,
         "push_velocities": args.push_velocities,
@@ -685,7 +673,7 @@ def main() -> int:
                 allow_upward_dz=args.frontres_allow_upward_dz,
                 ignore_conf=args.frontres_ignore_conf,
                 active_task_dims=args.frontres_active_task_dims,
-                subtract_zero_error_bias=not args.frontres_no_bias_subtraction,
+                subtract_zero_error_bias=args.frontres_subtract_zero_error_bias,
             )
             print(
                 f"[MuJoCoValidation] FrontRES enabled: {frontres_runtime.checkpoint} "
