@@ -20,6 +20,7 @@ import argparse
 import datetime as _datetime
 import gc
 import json
+import logging
 import math
 import os
 
@@ -348,14 +349,23 @@ def _close_robotbridge_agent(agent) -> None:
     env = getattr(agent, "env", None)
     recorder = getattr(env, "video_recorder", None)
     if recorder is not None and hasattr(recorder, "close"):
-        recorder.close()
+        try:
+            recorder.close()
+        except Exception as exc:
+            logging.warning("Ignoring RobotBridge video recorder close error: %r", exc)
     simulator = getattr(env, "simulator", None)
     close_sim = getattr(simulator, "close", None)
     if callable(close_sim):
-        close_sim()
+        try:
+            close_sim()
+        except Exception as exc:
+            logging.warning("Ignoring RobotBridge simulator close error: %r", exc)
     close_env = getattr(env, "close", None)
     if callable(close_env):
-        close_env()
+        try:
+            close_env()
+        except Exception as exc:
+            logging.warning("Ignoring RobotBridge env close error: %r", exc)
     gc.collect()
 
 
