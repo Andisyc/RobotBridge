@@ -448,6 +448,18 @@ def _refresh_obs_with_frontres(agent, obs_buf_dict, frontres_runtime, perturber=
         return obs_buf_dict
     _set_frontres_anchor_error_from_perturber(agent.env, perturber)
     delta = frontres_runtime.compute(agent.env, obs_buf_dict)
+    if getattr(agent.env, "_frontres_debug_delta", False):
+        step = int(getattr(agent.env.motion_loader, "timestep", 0))
+        if step % 30 == 0:
+            target = getattr(agent.env, "frontres_anchor_error", np.zeros(6, dtype=np.float32))
+            bias = getattr(frontres_runtime, "last_bias_delta", np.zeros(6, dtype=np.float32))
+            print(
+                "[FrontRESDebug] "
+                f"t={step} target={np.asarray(target).round(4).tolist()} "
+                f"delta={np.asarray(delta).round(4).tolist()} "
+                f"bias={np.asarray(bias).round(4).tolist()}",
+                flush=True,
+            )
     _set_frontres_delta(agent.env, delta)
     agent.env.compute_observation()
     return agent.env.obs_buf_dict
@@ -554,6 +566,10 @@ def main() -> int:
                         help="Task-space output dims enabled for FEMR. Default matches rp_z specialist.")
     parser.add_argument("--frontres_allow_upward_dz", action="store_true")
     parser.add_argument("--frontres_ignore_conf", action="store_true")
+    parser.add_argument("--frontres_no_bias_subtraction", action="store_true",
+                        help="Disable zero-error FEMR output subtraction.")
+    parser.add_argument("--frontres_debug_delta", action="store_true",
+                        help="Print FEMR target/delta/bias values every 30 motion steps.")
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--run_name", type=str, default=None,
                         help="Shared run folder name. Use the same value for baseline and FrontRES.")
@@ -635,6 +651,8 @@ def main() -> int:
         "frontres_active_task_dims": args.frontres_active_task_dims,
         "frontres_allow_upward_dz": args.frontres_allow_upward_dz,
         "frontres_ignore_conf": args.frontres_ignore_conf,
+        "frontres_subtract_zero_error_bias": not args.frontres_no_bias_subtraction,
+        "frontres_debug_delta": args.frontres_debug_delta,
         "epsilon_values": args.epsilon_values,
         "push_velocities": args.push_velocities,
         "perturbation_modes": args.perturbation_modes,
@@ -667,12 +685,14 @@ def main() -> int:
                 allow_upward_dz=args.frontres_allow_upward_dz,
                 ignore_conf=args.frontres_ignore_conf,
                 active_task_dims=args.frontres_active_task_dims,
+                subtract_zero_error_bias=not args.frontres_no_bias_subtraction,
             )
             print(
                 f"[MuJoCoValidation] FrontRES enabled: {frontres_runtime.checkpoint} "
                 f"(device={args.frontres_device}, history={args.frontres_history_length})",
                 flush=True,
             )
+        agent.env._frontres_debug_delta = bool(args.frontres_debug_delta)
 
         dt = float(getattr(agent.env.simulator, "high_dt", 0.02))
         for mode_idx, mode in enumerate(args.perturbation_modes):

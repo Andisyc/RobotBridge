@@ -89,6 +89,7 @@ class FrontRESRuntime:
         allow_upward_dz: bool = False,
         ignore_conf: bool = False,
         active_task_dims: tuple[int, ...] | list[int] | None = None,
+        subtract_zero_error_bias: bool = True,
     ) -> None:
         self.checkpoint = Path(checkpoint).expanduser().resolve()
         self.device = torch.device(device)
@@ -98,6 +99,7 @@ class FrontRESRuntime:
         self.allow_upward_dz = bool(allow_upward_dz)
         self.ignore_conf = bool(ignore_conf)
         self.active_task_dims = None if active_task_dims is None else tuple(int(v) for v in active_task_dims)
+        self.subtract_zero_error_bias = bool(subtract_zero_error_bias)
 
         checkpoint_obj = torch.load(self.checkpoint, map_location=self.device)
         model_state = checkpoint_obj.get("model_state_dict", checkpoint_obj)
@@ -116,6 +118,7 @@ class FrontRESRuntime:
         self.mean, self.var = _normalizer_stats(checkpoint_obj)
         self.history = deque(maxlen=self.history_length)
         self.last_delta = np.zeros(6, dtype=np.float32)
+        self.last_bias_delta = np.zeros(6, dtype=np.float32)
 
     def reset(self) -> None:
         self.history.clear()
@@ -132,23 +135,7 @@ class FrontRESRuntime:
             out[-tail:] = (out[-tail:] - self.mean) / np.sqrt(self.var + 1e-8)
         return out
 
-    def compute(self, env, obs_buf_dict: Mapping[str, np.ndarray]) -> np.ndarray:
-        gmt_obs = np.asarray(obs_buf_dict["obs"], dtype=np.float32).reshape(-1)
-        current_error = np.asarray(
-            getattr(env, "frontres_anchor_error", np.zeros(6, dtype=np.float32)),
-            dtype=np.float32,
-        ).reshape(6)
-        self.history.append(current_error)
-
-        pad_count = max(0, self.history_length - len(self.history))
-        history_flat = np.concatenate([np.zeros(6, dtype=np.float32)] * pad_count + list(self.history), axis=0)
-        frontres_obs = np.concatenate([history_flat, gmt_obs], axis=0)
-        norm_obs = self._normalize(frontres_obs)
-
-        with torch.no_grad():
-            raw = self.actor(torch.as_tensor(norm_obs, dtype=torch.float32, device=self.device).unsqueeze(0))[0]
-            raw_np = raw.detach().cpu().numpy().astype(np.float32)
-
+    def _decode_raw(self, raw_np: np.ndarray) -> np.ndarray:
         delta_pos = np.tanh(raw_np[:3]) * self.max_delta_pos
         delta_rpy = np.tanh(raw_np[3:6]) * self.max_delta_rpy
         conf_pos = np.ones(1, dtype=np.float32)
@@ -165,6 +152,37 @@ class FrontRESRuntime:
             correction *= mask
         delta_pos = correction[:3] * correction[6]
         delta_rpy = correction[3:6] * correction[7]
+        return np.concatenate([delta_pos, delta_rpy]).astype(np.float32)
+
+    def _actor_raw(self, obs: np.ndarray) -> np.ndarray:
+        norm_obs = self._normalize(obs)
+        with torch.no_grad():
+            raw = self.actor(torch.as_tensor(norm_obs, dtype=torch.float32, device=self.device).unsqueeze(0))[0]
+        return raw.detach().cpu().numpy().astype(np.float32)
+
+    def compute(self, env, obs_buf_dict: Mapping[str, np.ndarray]) -> np.ndarray:
+        gmt_obs = np.asarray(obs_buf_dict["obs"], dtype=np.float32).reshape(-1)
+        current_error = np.asarray(
+            getattr(env, "frontres_anchor_error", np.zeros(6, dtype=np.float32)),
+            dtype=np.float32,
+        ).reshape(6)
+        self.history.append(current_error)
+
+        pad_count = max(0, self.history_length - len(self.history))
+        history_flat = np.concatenate([np.zeros(6, dtype=np.float32)] * pad_count + list(self.history), axis=0)
+        frontres_obs = np.concatenate([history_flat, gmt_obs], axis=0)
+
+        delta = self._decode_raw(self._actor_raw(frontres_obs))
+        if self.subtract_zero_error_bias:
+            zero_history = np.zeros_like(history_flat)
+            zero_obs = np.concatenate([zero_history, gmt_obs], axis=0)
+            self.last_bias_delta = self._decode_raw(self._actor_raw(zero_obs))
+            delta = delta - self.last_bias_delta
+        else:
+            self.last_bias_delta[:] = 0.0
+
+        delta_pos = delta[:3]
+        delta_rpy = delta[3:6]
         if not self.allow_upward_dz:
             delta_pos[2] = min(float(delta_pos[2]), 0.0)
 
